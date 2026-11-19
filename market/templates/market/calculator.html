@@ -1,0 +1,52 @@
+{% extends "market/base.html" %}{% load static %}
+{% block title %}Portfolio Calculator · Beezy Trader{% endblock %}
+{% block head %}<script src="{% static 'market/vendor/plotly-basic.min.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="kicker">Simulator</div>
+<h1 class="banner">Portfolio calculator</h1>
+<p class="standfirst">Pick a style, amount and period.</p>
+
+<form id="calc-form" class="calc-form card" hx-get="/api/ui/calculator" hx-target="#calc-result" hx-sync="this:queue last"
+      hx-trigger="load, submit, change, input changed delay:600ms from:#calc-amount, input changed delay:600ms from:#calc-horizon">
+  <div class="profiles" role="radiogroup" aria-label="Risk style">
+    {% for key, p in profiles.items %}
+    <label class="profile-opt">
+      <input type="radio" name="profile" value="{{ key }}" {% if key == "steady" %}checked{% endif %}>
+      <span class="p-title">{{ p.label }}
+        <span class="risk-pips {% if key == 'low' %}r1{% elif key == 'steady' %}r2{% else %}r3{% endif %}" aria-hidden="true"><i></i><i></i><i></i></span></span>
+      <span class="p-tag">{{ p.tagline }}</span>
+    </label>
+    {% endfor %}
+  </div>
+
+  <div class="calc-row">
+    <label class="field">Amount to invest (KES)
+      <input id="calc-amount" name="amount" inputmode="decimal" value="100,000" autocomplete="off" required>
+    </label>
+    <label class="field">Hold for
+      <input id="calc-horizon" name="horizon" type="number" min="1" max="3650" step="1" value="1" required>
+    </label>
+    <label class="field">Period
+      <select name="unit">
+        <option value="days">Days</option>
+        <option value="weeks">Weeks</option>
+        <option value="months">Months</option>
+        <option value="years" selected>Years</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="costs" value="1" checked> Include trading costs (~2.1% each way)</label>
+    <button class="btn btn-accent" type="submit">Simulate</button>
+  </div>
+  <div class="quick" aria-label="Quick periods">
+    <span class="label" style="align-self:center">Quick:</span>
+    <button type="button" data-h="30" data-u="days">30 days</button>
+    <button type="button" data-h="90" data-u="days">90 days</button>
+    <button type="button" data-h="6" data-u="months">6 months</button>
+    <button type="button" data-h="1" data-u="years">1 year</button>
+    <button type="button" data-h="3" data-u="years">3 years</button>
+    <button type="button" data-h="5" data-u="years">5 years</button>
+  </div>
+</form>
+
+<div id="calc-result"><p class="loading">Simulating…</p></div>
+{% endblock %}

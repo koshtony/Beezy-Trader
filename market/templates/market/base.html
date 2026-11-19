@@ -1,0 +1,107 @@
+{% load static beezy %}<!doctype html>
+<html lang="en" class="theme-bw">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Beezy Trader · NSE{% endblock %}</title>
+  <meta name="description" content="Nairobi Securities Exchange trading assistant — valuation, projections, news, picks and a portfolio calculator.">
+  <link rel="icon" type="image/png" href="{% static 'market/img/favicon.png' %}">
+  <script>
+    // Apply the saved theme before first paint (same choice and key as Beezy Sales)
+    try {
+      const t = localStorage.getItem("beezy-theme");
+      if (["bw", "navy", "light"].includes(t)) document.documentElement.className = "theme-" + t;
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="{% static 'market/app.css' %}">
+  <script src="{% static 'market/vendor/htmx.min.js' %}" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <div id="page-progress" role="progressbar" aria-label="Loading"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{% url 'dashboard' %}" aria-label="Beezy Trader home">
+        <img src="{% static 'market/img/bee.png' %}" alt="" width="32" height="32">
+        <span>BEEZY TRADER</span>
+      </a>
+      <div class="topbar-tools">
+        <form class="jump" onsubmit="event.preventDefault(); const t=this.t.value.trim().toUpperCase(); if(t) location.href='/stocks/'+encodeURIComponent(t)+'/';">
+          <label class="sr" for="jump-t">Ticker</label>
+          <input id="jump-t" name="t" placeholder="Ticker e.g. SCOM" autocomplete="off" maxlength="12">
+        </form>
+        <div class="theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-theme-set="bw">B&amp;W</button>
+          <button type="button" data-theme-set="navy">Navy</button>
+          <button type="button" data-theme-set="light">Light</button>
+        </div>
+        <a class="api-link" href="/api/docs" target="_blank" rel="noopener" title="API documentation">API</a>
+      </div>
+    </div>
+  </header>
+
+  {% block tape %}{% endblock %}
+
+  <div id="status" class="statusbar" hx-get="/api/ui/status" hx-trigger="load" hx-swap="outerHTML"></div>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="colophon">
+    <p><strong>Not investment advice.</strong> Data: AFX · stockanalysis.com · Google News ·
+      <button type="button" class="linkish" data-open-disclaimer>Disclaimer</button></p>
+  </footer>
+
+  <!-- Bottom app menu: coloured opposite to the theme so it always stands out -->
+  <nav class="app-nav" aria-label="Main">
+    <a href="{% url 'dashboard' %}" class="app-nav-item{% if nav == 'dashboard' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="{% url 'screener' %}" class="app-nav-item{% if nav == 'screener' or nav == 'stock' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span>Screener</span>
+    </a>
+    <a href="{% url 'calculator' %}" class="app-nav-item{% if nav == 'calculator' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+      <span>Calculator</span>
+    </a>
+    <a href="{% url 'news' %}" class="app-nav-item{% if nav == 'news' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+      <span>News</span>
+    </a>
+    <a href="{% url 'method' %}" class="app-nav-item{% if nav == 'method' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      <span>Method</span>
+    </a>
+  </nav>
+
+  <!-- First-visit disclaimer (accepting sets a 1-year cookie, after which the server stops rendering it) -->
+  <dialog id="disclaimer" class="modal" aria-labelledby="disclaimer-title" {% if request.COOKIES.bz_disclaimer != "1" %}data-auto-open{% endif %}>
+    <div class="modal-body">
+      <div class="modal-head">
+        <img src="{% static 'market/img/bee.png' %}" alt="" width="40" height="40">
+        <div>
+          <div class="label">Before you continue</div>
+          <h2 id="disclaimer-title">Important disclaimer</h2>
+        </div>
+      </div>
+      <ul>
+        <li><b>Not financial advice.</b> Beezy Trader is an educational research tool. Nothing here is a recommendation or an offer to buy or sell any security.</li>
+        <li><b>Projections are estimates, not promises.</b> They come from statistical models of past prices, company figures and news tone. Real outcomes can be far worse than the ranges shown.</li>
+        <li><b>Your capital is at risk.</b> Share prices can fall as well as rise, and you may get back less than you invest. Past performance does not predict future returns.</li>
+        <li><b>Data may be delayed or wrong.</b> Prices are end-of-day and come from third-party websites, as do fundamentals and headlines. Always check against official NSE and company filings.</li>
+        <li><b>Get professional advice.</b> Speak to a stockbroker or investment adviser licensed by the Capital Markets Authority (CMA) before you invest.</li>
+      </ul>
+      <form method="dialog" class="modal-actions">
+        <button type="submit" class="btn btn-accent" data-accept-disclaimer autofocus>I understand — continue</button>
+      </form>
+    </div>
+  </dialog>
+
+  <script src="{% static 'market/app.js' %}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

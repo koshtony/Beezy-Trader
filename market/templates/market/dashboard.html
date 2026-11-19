@@ -1,0 +1,97 @@
+{% extends "market/base.html" %}{% load static beezy %}
+{% block head %}<script src="{% static 'market/vendor/plotly-basic.min.js' %}" defer></script>{% endblock %}
+
+{% block tape %}
+<div class="tape" aria-label="Ticker tape">
+  <div class="tape-track">
+    {% for r in tape %}<a href="{% url 'stock' r.ticker %}" class="tick {{ r.change_pct|tone }}"><b>{{ r.ticker }}</b> {{ r.price|num }} <span>{{ r.change_pct|arrow }} {{ r.change_pct|spctv }}</span></a>{% endfor %}
+    {% for r in tape %}<a href="{% url 'stock' r.ticker %}" class="tick {{ r.change_pct|tone }}" aria-hidden="true" tabindex="-1"><b>{{ r.ticker }}</b> {{ r.price|num }} <span>{{ r.change_pct|arrow }} {{ r.change_pct|spctv }}</span></a>{% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="headline-row">
+  <div class="index-box">
+    <div class="kicker">NSE All Share Index</div>
+    <div class="index-value">{{ summary.index.value|num }}</div>
+    <div class="index-change {{ summary.index.change|tone }}">{{ summary.index.change|arrow }} {{ summary.index.change|signed }} ({{ summary.index.change_pct|spctv }})</div>
+    <dl class="mini">
+      <div><dt>12-month</dt><dd class="{{ summary.index.ret_1y|tone }}">{{ summary.index.ret_1y|pct }}</dd></div>
+      <div><dt>Advancers</dt><dd class="up">{{ summary.breadth.advancers|default:"—" }}</dd></div>
+      <div><dt>Decliners</dt><dd class="down">{{ summary.breadth.decliners|default:"—" }}</dd></div>
+      <div><dt>Unchanged</dt><dd>{{ summary.breadth.unchanged|default:"—" }}</dd></div>
+    </dl>
+  </div>
+  <div class="lede">
+    <h1 class="banner">Five to Buy Now</h1>
+    <p class="standfirst">Value, quality, dividends, projections and news — adjusted for risk.</p>
+  </div>
+</section>
+
+{% if recs.top5 %}
+<section class="picks" aria-label="Top five picks">
+  {% for p in recs.top5 %}
+  <article class="pick">
+    <header>
+      <span class="rank">#{{ forloop.counter }} pick</span>
+      <a class="pick-ticker" href="{% url 'stock' p.ticker %}">{{ p.ticker }}</a>
+      <span class="pick-name">{{ p.name }}</span>
+    </header>
+    <div class="pick-price"><span class="kes">KES</span> {{ p.price|num }} <small class="{{ p.change_pct|tone }}">{{ p.change_pct|spctv }}</small></div>
+    <dl class="pick-stats">
+      <div><dt>12-mo proj.</dt><dd class="{{ p.exp_1y|tone }}">{{ p.exp_1y|pct }}</dd></div>
+      <div><dt>Chance up</dt><dd>{{ p.prob_up_1y|pctu }}</dd></div>
+      <div><dt>Score</dt><dd><span class="stamp {{ p.composite|score_band }}">{{ p.composite|num:0 }}</span></dd></div>
+      <div><dt>Risk</dt><dd><span class="risk {{ p.risk|risk_band }}">{{ p.risk|num:0 }}</span></dd></div>
+    </dl>
+    <ul class="why">{% for r in p.reasons|slice:":4" %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% if p.warnings %}<ul class="watch">{% for w in p.warnings|slice:":2" %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% else %}
+<p class="empty">No picks yet — run <code>python manage.py bootstrap</code> (or <code>analyze</code> once data is loaded).</p>
+{% endif %}
+
+<section class="two-col">
+  <div class="column profile hi">
+    <h2 class="section-head">High risk · high expected gain</h2>
+    {% include "market/partials/profile_table.html" with rows=recs.high_risk_high_gain %}
+  </div>
+  <div class="column profile lo">
+    <h2 class="section-head">Low risk · steadier return</h2>
+    {% include "market/partials/profile_table.html" with rows=recs.low_risk_low_gain %}
+  </div>
+</section>
+
+<section class="two-col wide-left">
+  <div class="column">
+    <h2 class="section-head">Risk vs. reward</h2>
+    <div id="scatter" class="chart" role="img" aria-label="Scatter of risk score against projected 12-month return"></div>
+  </div>
+  <div class="column">
+    <h2 class="section-head">Market movers</h2>
+    <div class="tabs" role="tablist">
+      <button role="tab" class="tab on" hx-get="/api/ui/movers?kind=gainers" hx-target="#movers" data-tabgroup="movers">Gainers</button>
+      <button role="tab" class="tab" hx-get="/api/ui/movers?kind=losers" hx-target="#movers" data-tabgroup="movers">Losers</button>
+      <button role="tab" class="tab" hx-get="/api/ui/movers?kind=active" hx-target="#movers" data-tabgroup="movers">Active</button>
+      <button role="tab" class="tab" hx-get="/api/ui/movers?kind=volatile" hx-target="#movers" data-tabgroup="movers">Volatile</button>
+      <button role="tab" class="tab" hx-get="/api/ui/movers?kind=ytd" hx-target="#movers" data-tabgroup="movers">YTD</button>
+    </div>
+    <div id="movers" hx-get="/api/ui/movers?kind=gainers" hx-trigger="load"><p class="loading">Loading…</p></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2 class="section-head">Latest news</h2>
+  <div class="tabs" role="tablist">
+    <button role="tab" class="tab on" hx-get="/api/ui/news?limit=16" hx-target="#wire" data-tabgroup="wire">All</button>
+    <button role="tab" class="tab" hx-get="/api/ui/news?label=positive&limit=16" hx-target="#wire" data-tabgroup="wire">Positive</button>
+    <button role="tab" class="tab" hx-get="/api/ui/news?label=negative&limit=16" hx-target="#wire" data-tabgroup="wire">Negative</button>
+  </div>
+  <div id="wire" hx-get="/api/ui/news?limit=16" hx-trigger="load"><p class="loading">Loading…</p></div>
+</section>
+{% endblock %}
+
+{% block scripts %}<script>document.addEventListener("DOMContentLoaded", () => window.Beezy && Beezy.scatter("scatter"));</script>{% endblock %}

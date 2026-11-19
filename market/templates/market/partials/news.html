@@ -1,0 +1,14 @@
+{% load beezy %}<ol class="wire">
+{% for n in items %}
+  <li class="item {{ n.label }}">
+    <span class="label-chip {{ n.label }}" title="Sentiment score {{ n.sentiment|signed }}">{% if n.label == "positive" %}▲ Positive{% elif n.label == "negative" %}▼ Negative{% else %}■ Neutral{% endif %}</span>
+    <div class="wire-body">
+      {% if n.url %}<a class="wire-title" href="{{ n.url }}" target="_blank" rel="noopener noreferrer">{{ n.title|truncatechars:180 }}</a>{% else %}<span class="wire-title">{{ n.title|truncatechars:180 }}</span>{% endif %}
+      <div class="wire-meta">{% if not ticker %}<a href="{% url 'stock' n.ticker %}" class="tkr">{{ n.ticker }}</a> · {% endif %}{{ n.source|default:"—" }} · {{ n.published|date:"j M Y" }}
+        {% if n.terms %}<span class="terms" title="Words that drove the label">“{{ n.terms|slice:":3"|join:", " }}”</span>{% endif %}</div>
+    </div>
+  </li>
+{% empty %}
+  <li class="empty">No headlines on file{% if label %} with that tone{% endif %}.</li>
+{% endfor %}
+</ol>

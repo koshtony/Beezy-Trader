@@ -1,0 +1,18 @@
+{% load beezy %}{% if rows %}
+<div class="scroll-x"><table class="ledger compact">
+  <thead><tr><th>Counter</th><th class="n">Price</th><th class="n">12-mo proj.</th><th class="n">P(gain)</th><th class="n">Volatility</th><th class="n">Risk</th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+    <tr>
+      <td><a href="{% url 'stock' p.ticker %}" title="{{ p.name }}"><b>{{ p.ticker }}</b></a> <span class="muted small">{{ p.sector }}</span>
+        {% if p.reasons %}<div class="sub">{{ p.reasons|first }}</div>{% endif %}</td>
+      <td class="n">{{ p.price|num }}</td>
+      <td class="n {{ p.exp_1y|tone }}">{{ p.exp_1y|pct }}</td>
+      <td class="n">{{ p.prob_up_1y|pctu }}</td>
+      <td class="n">{{ p.vol_1y|pctu }}</td>
+      <td class="n"><span class="risk {{ p.risk|risk_band }}">{{ p.risk|num:0 }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="empty">Nothing qualifies yet.</p>{% endif %}

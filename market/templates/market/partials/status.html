@@ -1,0 +1,25 @@
+{% load beezy %}<div id="status" class="statusbar{% if status.running %} busy{% endif %}"
+  {% if status.running or just_started %}hx-get="/api/ui/status?was=running" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <div class="status-left">
+    {% if status.running %}
+      <span class="press" aria-hidden="true"></span>
+      <strong>Updating:</strong> {{ status.current.job }} {% if status.current.progress %}&middot; {{ status.current.progress }}{% endif %}
+    {% elif just_started %}
+      <span class="press" aria-hidden="true"></span> Starting…
+    {% else %}
+      <span>Prices as at <strong>{{ summary.as_of|default:"—" }}</strong></span>
+      <span class="sep">|</span>
+      <span>Analysed {% if summary.analysed_at %}{{ summary.analysed_at|iso|timesince }} ago{% else %}never{% endif %}</span>
+      <span class="sep">|</span>
+      <span>{{ summary.with_history }}/{{ summary.stocks }} with full history</span>
+      <span class="sep">|</span>
+      <span>{{ summary.headlines }} headlines on file</span>
+    {% endif %}
+  </div>
+  {% if can_refresh %}<div class="status-right">
+    <button class="btn" hx-post="/api/ui/refresh?kind=prices" hx-target="#status" hx-swap="outerHTML" {% if status.running %}disabled{% endif %}
+      title="Scrape today's closing prices and re-run the analysis">Update prices</button>
+    <button class="btn" hx-post="/api/ui/refresh?kind=news" hx-target="#status" hx-swap="outerHTML" {% if status.running %}disabled{% endif %}
+      title="Fetch fresh headlines for every stock (~2 min)">Update news</button>
+  </div>{% endif %}
+</div>

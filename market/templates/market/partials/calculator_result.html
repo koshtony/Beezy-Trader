@@ -1,0 +1,98 @@
+{% load beezy %}{% if error %}
+<section><div class="error-box">{{ error }}</div></section>
+{% else %}{% with s=r.summary %}
+<section>
+  <h2 class="section-head">{{ r.profile_label }} portfolio · KES {{ r.amount|num:0 }} for {{ r.horizon_label }}</h2>
+  <div class="tiles">
+    <div class="tile hero-tile">
+      <div class="label">Likely value (median)</div>
+      <div class="value hero">KES {{ s.median|num:0 }}</div>
+      <div class="sub {{ s.profit_median|tone }}">{{ s.profit_median|signed:0 }} ({{ s.return_median|pct }}){% if s.annualised is not None %} · {{ s.annualised|pct }}/yr{% endif %}</div>
+    </div>
+    <div class="tile">
+      <div class="label">Chance of profit</div>
+      <div class="value">{{ s.prob_profit|pctu }}</div>
+      <div class="sub">{{ s.prob_loss_10|pctu }} chance of losing over 10%</div>
+    </div>
+    <div class="tile">
+      <div class="label">Bad case (1 in 20)</div>
+      <div class="value down">KES {{ s.p5|num:0 }}</div>
+      <div class="sub">Only 5% of simulations ended lower</div>
+    </div>
+    <div class="tile">
+      <div class="label">Good case (1 in 20)</div>
+      <div class="value up">KES {{ s.p95|num:0 }}</div>
+      <div class="sub">5% of simulations ended higher</div>
+    </div>
+  </div>
+  <p class="note">Incl. KES {{ s.dividends|num:0 }} dividends{% if r.include_costs %} · {{ r.fee_rate|pctu:1 }} costs each way{% endif %} · KES {{ s.cash_left|num:0 }} uninvested</p>
+  {% if r.include_costs and r.calendar_days < 60 %}<div class="callout">Short holds rarely beat the ~4% round-trip trading cost.</div>{% endif %}
+  {% if r.extrapolated %}<p class="note">Beyond 12 months: illustrative only.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2 class="section-head">How the value could grow</h2>
+  <div id="calc-chart" class="chart" role="img" aria-label="Simulated portfolio value over time with likely, middle-half and 90% ranges"></div>
+  {{ r.chart|json_script:"calc-chart-data" }}
+</section>
+
+<section class="card">
+    <h2 class="section-head">What you'd buy</h2>
+    <div class="scroll-x">
+    <table class="ledger compact">
+      <thead><tr><th>Counter</th><th class="n">Weight</th><th class="n">Shares</th><th class="n">Cost</th><th class="n">Price now</th><th class="n">Likely price</th><th class="n">Dividends</th></tr></thead>
+      <tbody>
+      {% for h in r.holdings %}
+        <tr>
+          <td class="nowrap"><a href="{% url 'stock' h.ticker %}" title="{{ h.name }}"><b>{{ h.ticker }}</b></a> <span class="muted small">{{ h.sector }}</span>
+            {% if h.reason %}<div class="sub">{{ h.reason }}</div>{% endif %}</td>
+          <td class="n">{{ h.weight|pctu }}</td>
+          <td class="n">{{ h.shares|num:0 }}</td>
+          <td class="n">{{ h.cost|num:0 }}</td>
+          <td class="n">{{ h.price|num }}</td>
+          <td class="n {{ h.expected_price|tone }}">{{ h.expected_price|num }}</td>
+          <td class="n">{{ h.dividends|num:0 }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    
+</section>
+
+<section class="card">
+    <h2 class="section-head">Along the way</h2>
+    <div class="scroll-x">
+    <table class="ledger compact">
+      <thead><tr><th>After</th><th class="n">Likely value</th><th class="n">Profit</th><th class="n">Range (90%)</th><th class="n">P(profit)</th></tr></thead>
+      <tbody>
+      {% for m in r.milestones %}
+        <tr>
+          <td class="nowrap"><b>{{ m.label }}</b><div class="sub">{{ m.date }}</div></td>
+          <td class="n">{{ m.median|num:0 }}</td>
+          <td class="n {{ m.profit|tone }}">{{ m.profit|signed:0 }}</td>
+          <td class="n small">{{ m.p5|num:0 }} – {{ m.p95|num:0 }}</td>
+          <td class="n">{{ m.prob_profit|pctu }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="note">After selling costs.</p>
+</section>
+
+<section>
+  <h2 class="section-head">Compare risk styles · same amount and period</h2>
+  <div class="compare">
+    {% for c in r.compare %}
+    <button type="button" class="tile{% if c.profile == r.profile %} on{% endif %}" data-pick-profile="{{ c.profile }}" style="text-align:left;cursor:pointer;font:inherit;color:inherit">
+      <div class="label">{{ c.label }}</div>
+      <div class="value">KES {{ c.median|num:0 }}</div>
+      <div class="sub {{ c.profit|tone }}">{{ c.profit|signed:0 }} likely · {{ c.prob_profit|pctu }} chance of profit</div>
+      <div class="sub">Range KES {{ c.p5|num:0 }} – {{ c.p95|num:0 }}</div>
+      <div class="sub">{{ c.tickers|join:" · " }}</div>
+    </button>
+    {% endfor %}
+  </div>
+</section>
+{% endwith %}{% endif %}

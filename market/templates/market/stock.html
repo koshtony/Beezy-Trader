@@ -1,0 +1,142 @@
+{% extends "market/base.html" %}{% load static beezy %}
+{% block title %}{{ d.ticker }} · {{ d.name }} · Beezy Trader{% endblock %}
+{% block head %}<script src="{% static 'market/vendor/plotly-basic.min.js' %}" defer></script>{% endblock %}
+
+{% block content %}
+<section class="stock-head">
+  <div>
+    <div class="kicker">{{ d.sector }}{% if d.suspended %} · <span class="down">SUSPENDED</span>{% endif %}{% if non_equity %} · not an ordinary share{% endif %}</div>
+    <h1 class="stock-title">{{ d.name }} <span class="tkr-badge">NSE: {{ d.ticker }}</span></h1>
+    <div class="price-line">
+      <span class="big-price"><span class="kes">KES</span> {{ d.row.price|num }}</span>
+      <span class="{{ d.row.change|tone }} chg">{{ d.row.change|arrow }} {{ d.row.change|signed }} ({{ d.row.change_pct|spctv }})</span>
+      <span class="muted">as at {{ d.as_of|default:"—" }}</span>
+    </div>
+  </div>
+  <div class="verdict-box">
+    <div class="kicker">Beezy score</div>
+    <div class="score-big stamp {{ d.row.composite|score_band }}">{{ d.row.composite|num:0 }}</div>
+    <div class="muted small">Risk <span class="risk {{ d.row.risk|risk_band }}">{{ d.row.risk|num:0 }}</span> · Risk-adjusted {{ d.row.risk_adjusted|num:1 }}</div>
+  </div>
+</section>
+
+{% if d.reasons or d.warnings %}
+<section class="findings">
+  {% if d.reasons %}<div><h3 class="mini-head up">In its favour</h3><ul class="why">{% for r in d.reasons %}<li>{{ r }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if d.warnings %}<div><h3 class="mini-head down">Watch out for</h3><ul class="watch">{% for w in d.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2 class="section-head">Price history &amp; projection</h2>
+  <div id="price-chart" class="chart tall" data-ticker="{{ d.ticker }}" role="img" aria-label="Closing price history with 50 and 200 day averages and projected range"></div>
+</section>
+
+<section class="card">
+  <h2 class="section-head">Projections</h2>
+  {% if d.projections %}
+  <div class="scroll-x">
+  <table class="ledger">
+    <thead><tr>
+      <th>Horizon</th><th>Target date</th><th class="n">Projected</th><th class="n">Change</th><th class="n">90% range</th><th class="n">P(gain)</th>
+      <th class="n" title="How the projection blends data sources">Blend</th>
+      <th class="n" title="Walk-forward backtest of the statistical part: direction hit-rate / share of outcomes inside the 90% band">Backtest</th>
+    </tr></thead>
+    <tbody>
+    {% for p in d.projections %}
+      <tr>
+        <td><b>{{ p.label }}</b></td>
+        <td>{{ p.target_date }}</td>
+        <td class="n">{{ p.expected_price|num }}</td>
+        <td class="n {{ p.expected_return|tone }}">{{ p.expected_return|pct }}</td>
+        <td class="n">{{ p.low|num }} – {{ p.high|num }}</td>
+        <td class="n">{{ p.prob_up|pctu }}</td>
+        <td class="n small">
+          {% with w=p.components.weights %}
+          stats {{ w.statistical|pctu }}{% if w.fundamental %} · fund. {{ w.fundamental|pctu }}{% endif %}{% if w.analyst %} · analysts {{ w.analyst|pctu }}{% endif %}{% if p.components.news_tilt %} · news {{ p.components.news_tilt|pct:2 }}{% endif %}
+          {% endwith %}
+        </td>
+        <td class="n small">{% if p.backtest.samples %}{{ p.backtest.hit_rate|pctu }} dir · {{ p.backtest.band_coverage|pctu }} in band{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% with p=d.projections|last %}
+  <p class="note">{% if m.analyst_target %}Analyst target KES {{ m.analyst_target|num }} ({{ m.analyst_consensus|default:"n/a" }}).{% endif %}</p>
+  {% endwith %}
+  {% else %}<p class="empty">Not enough price history to project yet.</p>{% endif %}
+</section>
+
+<section>
+  <h2 class="section-head">Fundamentals</h2>
+  {% if m.available %}
+  <div class="ledger-grid">
+    {% for title, rows in sections %}
+    <div class="ledger-card">
+      <h3>{{ title }}</h3>
+      <table class="ledger metrics">
+        <tbody>
+        {% for key, label, value, unit, help in rows %}
+          {% with v=verdicts|get:key %}
+          <tr>
+            <th scope="row"><span class="metric-name" title="{{ help }}">{{ label }}</span></th>
+            <td class="n val">{{ value|metric:unit }}</td>
+            <td><span class="stamp {{ v.verdict|default:'na' }}">{% if v.verdict == "na" or not v %}n/a{% else %}{{ v.verdict }}{% endif %}</span></td>
+          </tr>
+          <tr class="note-row"><td colspan="3">{{ v.note|default:help }}</td></tr>
+          {% endwith %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    <div class="ledger-card">
+      <h3>Risk &amp; trading</h3>
+      <table class="ledger metrics kv"><tbody>
+        <tr><th scope="row">Volatility (1Y, annualised)</th><td class="n val">{{ t.vol_1y|pctu }}</td></tr>
+        <tr><th scope="row">Volatility (30 sessions)</th><td class="n val">{{ t.vol_30d|pctu }}</td></tr>
+        <tr><th scope="row">Max drawdown (1Y)</th><td class="n val down">{{ t.max_drawdown_1y|pct }}</td></tr>
+        <tr><th scope="row">Beta vs NASI</th><td class="n val">{{ t.beta|num }}</td></tr>
+        <tr><th scope="row">RSI (14)</th><td class="n val">{{ t.rsi_14|num:0 }}</td></tr>
+        <tr><th scope="row">52-week range</th><td class="n val">{{ t.low_52w|num }} – {{ t.high_52w|num }}</td></tr>
+        <tr><th scope="row">Price vs 200-day avg.</th><td class="n val {{ t.vs_sma200|tone }}">{{ t.vs_sma200|pct }}</td></tr>
+        <tr><th scope="row">Returns 1W · 1M · YTD · 1Y</th><td class="n val small"><span class="{{ t.ret_1w|tone }}">{{ t.ret_1w|pct }}</span> · <span class="{{ t.ret_1m|tone }}">{{ t.ret_1m|pct }}</span> · <span class="{{ t.ret_ytd|tone }}">{{ t.ret_ytd|pct }}</span> · <span class="{{ t.ret_1y|tone }}">{{ t.ret_1y|pct }}</span></td></tr>
+        <tr><th scope="row">Avg. daily turnover</th><td class="n val">{% if t.avg_turnover %}KES {{ t.avg_turnover|big }}{% else %}—{% endif %}</td></tr>
+        <tr><th scope="row">Market cap</th><td class="n val">{% if m.market_cap %}KES {{ m.market_cap|big }}{% else %}—{% endif %}</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <p class="note">TTM{% if m.fiscal_period %} to {{ m.fiscal_period }}{% endif %} · sector P/E {{ m.sector_medians.pe|num:1 }} · P/B {{ m.sector_medians.pb|num:2 }}</p>
+  {% else %}
+  <p class="empty">No fundamental data available for this counter.</p>
+  {% endif %}
+</section>
+
+<section class="two-col">
+  <div class="column">
+    <h2 class="section-head">Score breakdown</h2>
+    <table class="ledger bars">
+      <tbody>
+      {% for k, v in pillars.items %}
+        <tr><th scope="row">{{ k|capfirst }}</th>
+          <td class="bar-cell"><span class="bar {{ v|score_band }}" style="width: {{ v|width }}%"></span></td>
+          <td class="n">{{ v|num:0 }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">News 30d: {{ news_agg.positive|default:0 }}↑ {{ news_agg.negative|default:0 }}↓ {{ news_agg.neutral|default:0 }}■</p>
+  </div>
+  <div class="column">
+    <h2 class="section-head">Earnings per share by year</h2>
+    <div id="eps-chart" class="chart short" role="img" aria-label="Earnings per share history"></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2 class="section-head">{{ d.ticker }} in the news</h2>
+  <div id="stock-news" hx-get="/api/ui/news?ticker={{ d.ticker }}&limit=20" hx-trigger="revealed"><p class="loading">Loading…</p></div>
+</section>
+{% endblock %}
+
+{% block scripts %}<script>document.addEventListener("DOMContentLoaded", () => window.Beezy && Beezy.stockCharts("{{ d.ticker|escapejs }}"));</script>{% endblock %}

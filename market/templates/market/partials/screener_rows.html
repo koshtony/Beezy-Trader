@@ -1,0 +1,23 @@
+{% load beezy %}{% for r in rows %}
+<tr{% if r.suspended %} class="suspended"{% endif %}>
+  <td data-v="{{ r.ticker }}"><span class="dot {% if r.liquid %}up{% else %}flat{% endif %}"></span> <a href="{% url 'stock' r.ticker %}"><b>{{ r.ticker }}</b></a> <span class="muted">{{ r.name|truncatechars:22 }}</span></td>
+  <td data-v="{{ r.sector }}" class="small">{{ r.sector }}</td>
+  <td class="n" data-v="{{ r.price|default_if_none:'' }}">{{ r.price|num }}</td>
+  <td class="n {{ r.change_pct|tone }}" data-v="{{ r.change_pct|default_if_none:'' }}">{{ r.change_pct|spctv }}</td>
+  <td class="n" data-v="{{ r.pe|default_if_none:'' }}">{{ r.pe|num:1 }}</td>
+  <td class="n" data-v="{{ r.peg|default_if_none:'' }}">{{ r.peg|num }}</td>
+  <td class="n" data-v="{{ r.pb|default_if_none:'' }}">{{ r.pb|num }}</td>
+  <td class="n" data-v="{{ r.ps|default_if_none:'' }}">{{ r.ps|num }}</td>
+  <td class="n" data-v="{{ r.roe|default_if_none:'' }}">{{ r.roe|pctv:0 }}</td>
+  <td class="n" data-v="{{ r.debt_to_equity|default_if_none:'' }}">{{ r.debt_to_equity|num }}</td>
+  <td class="n" data-v="{{ r.dividend_yield|default_if_none:'' }}">{{ r.dividend_yield|pctv }}</td>
+  <td class="n" data-v="{{ r.vol_1y|default_if_none:'' }}">{{ r.vol_1y|pctu }}</td>
+  <td class="n {{ r.exp_1m|tone }}" data-v="{{ r.exp_1m|default_if_none:'' }}">{{ r.exp_1m|pct }}</td>
+  <td class="n {{ r.exp_1y|tone }}" data-v="{{ r.exp_1y|default_if_none:'' }}">{{ r.exp_1y|pct }}</td>
+  <td class="n {{ r.sentiment|tone }}" data-v="{{ r.sentiment|default_if_none:'' }}">{{ r.sentiment|signed }}</td>
+  <td class="n" data-v="{{ r.composite|default_if_none:'' }}"><span class="stamp {{ r.composite|score_band }}">{{ r.composite|num:0 }}</span></td>
+  <td class="n" data-v="{{ r.risk|default_if_none:'' }}"><span class="risk {{ r.risk|risk_band }}">{{ r.risk|num:0 }}</span></td>
+</tr>
+{% empty %}
+<tr><td colspan="17" class="empty">No counters match.</td></tr>
+{% endfor %}

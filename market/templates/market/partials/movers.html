@@ -1,0 +1,21 @@
+{% load beezy %}<div class="scroll-x"><table class="ledger compact">
+  <caption class="sr">{{ title }}</caption>
+  <thead><tr><th>Counter</th><th class="n">Price</th>
+    {% if kind == "active" %}<th class="n">Turnover</th>{% elif kind == "volatile" %}<th class="n">1Y σ</th>{% elif kind == "ytd" %}<th class="n">YTD</th>{% else %}<th class="n">Volume</th>{% endif %}
+    <th class="n">Change</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="nowrap"><a href="{% url 'stock' r.ticker %}" title="{{ r.name }}"><b>{{ r.ticker }}</b></a> <span class="muted">{{ r.name|truncatechars:20 }}</span></td>
+      <td class="n">{{ r.price|num }}</td>
+      {% if kind == "active" %}<td class="n">{{ r.turnover|big }}</td>
+      {% elif kind == "volatile" %}<td class="n">{{ r.vol_1y|pctu }}</td>
+      {% elif kind == "ytd" %}<td class="n {{ r.ret_ytd|tone }}">{{ r.ret_ytd|pct }}</td>
+      {% else %}<td class="n">{{ r.volume|big }}</td>{% endif %}
+      <td class="n {{ r.change_pct|tone }}">{{ r.change_pct|arrow }} {{ r.change_pct|spctv }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4" class="empty">No movers recorded for the last session.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>

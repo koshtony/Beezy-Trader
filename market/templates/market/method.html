@@ -1,0 +1,55 @@
+{% extends "market/base.html" %}{% load beezy %}
+{% block title %}Methodology · Beezy Trader{% endblock %}
+{% block content %}
+<article class="essay">
+<h1 class="banner">Methodology</h1>
+
+
+<h2 class="section-head">1 · Data</h2>
+<ul>
+  <li><b>Daily prices</b>: the NSE end-of-day price list (one request to afx.kwayisi.org), stored each trading day with volume.</li>
+  <li><b>History</b>: about ten years of daily closes per counter, loaded once. The site's 60-second crawl delay is respected.</li>
+  <li><b>Fundamentals</b>: trailing-twelve-month revenue, gross profit, net income, EPS (and its multi-year history), equity, debt, operating cash flow, capex, dividends and analyst targets from stockanalysis.com. Refreshed weekly.</li>
+  <li><b>News</b>: Google News (Kenya edition), searched for each company's name over the last 60 days.</li>
+</ul>
+
+<h2 class="section-head">2 · Metrics</h2>
+<p>P/E, PEG, P/B, P/S, dividend yield and payout are recalculated with <em>today's</em> price. ROE, gross margin, debt-to-equity and free cash flow come from the latest reported figures. Each metric gets a verdict (<span class="stamp good">good</span> <span class="stamp fair">fair</span> <span class="stamp poor">poor</span>) using common rules of thumb and the median for its sector. Banks and insurers are treated differently: free cash flow and gross margin don't apply to them, and their debt-to-equity counts only borrowings, not customer deposits.</p>
+
+<h2 class="section-head">3 · Projections</h2>
+<p>Each horizon blends three drift estimates. Each estimate is shrunk toward zero according to how statistically reliable it is.</p>
+<div class="scroll-x"><table class="ledger compact"><thead><tr><th>Horizon</th><th class="n">Recent (EWMA + 20-day trend)</th><th class="n">Last year</th><th class="n">Long run (≤10y)</th><th class="n">Statistical</th><th class="n">Fundamental</th><th class="n">Analyst</th></tr></thead>
+<tbody>{% for hz, w in drift.items %}{% with a=anchors|get:hz %}<tr><td><b>{{ hz }}</b></td><td class="n">{{ w.0|pctu }}</td><td class="n">{{ w.1|pctu }}</td><td class="n">{{ w.2|pctu }}</td><td class="n">{{ a.0|pctu }}</td><td class="n">{{ a.1|pctu }}</td><td class="n">{{ a.2|pctu }}</td></tr>{% endwith %}{% endfor %}</tbody></table></div>
+<p>Short horizons lean on recent behaviour, and recent headline sentiment nudges the daily and weekly projections. Longer horizons lean on long-run history and on fundamentals. The fundamental anchor is expected EPS growth plus a partial re-rating toward the sector's median P/E. Where analysts publish a price target, it is blended in too. The ranges are 90% log-normal bands built from a mix of recent (EWMA) and longer-run volatility. Every projection is backtested walk-forward: we report how often it called the direction correctly and how often the actual price landed inside the band. Day-to-day price moves are close to random, so expect daily direction calls of only about 50%.</p>
+
+<h2 class="section-head">4 · Scores &amp; picks</h2>
+<div class="scroll-x"><table class="ledger compact"><thead><tr><th>Pillar</th><th class="n">Weight</th><th>What it measures</th></tr></thead><tbody>
+<tr><td>Value</td><td class="n">{{ pillars.value|pctu }}</td><td>P/E (absolute and against the sector), PEG, P/B (penalised when cheap shares come with weak ROE), P/S</td></tr>
+<tr><td>Quality</td><td class="n">{{ pillars.quality|pctu }}</td><td>ROE, gross margin, free-cash-flow yield, EPS growth and how steady it is</td></tr>
+<tr><td>Health</td><td class="n">{{ pillars.health|pctu }}</td><td>Debt-to-equity, current ratio, whether the company is profitable</td></tr>
+<tr><td>Income</td><td class="n">{{ pillars.income|pctu }}</td><td>Dividend yield and how well earnings cover it</td></tr>
+<tr><td>Outlook</td><td class="n">{{ pillars.outlook|pctu }}</td><td>Projected 1-month and 12-month returns, chance of a gain, trend against the 200-day average, RSI</td></tr>
+<tr><td>Sentiment</td><td class="n">{{ pillars.sentiment|pctu }}</td><td>30-day news tone, with recent headlines counting more (half-life 7 days) and fewer headlines meaning lower confidence</td></tr>
+</tbody></table></div>
+<p><b>Risk</b> (0–100) combines volatility, maximum drawdown, beta, thin trading, leverage and losses. The <b>risk-adjusted score</b> is the composite score minus 0.2 points for every risk point above 50. The <b>Top 5</b> are the highest risk-adjusted scores among liquid, profitable ordinary shares with a positive 12-month projection, with at most two per sector. <b>High risk · high gain</b> takes the counters with above-median risk and ranks them by projected return. <b>Low risk · steady</b> ranks counters scoring at least 45 by lowest risk.</p>
+<h2 class="section-head">5 · Portfolio calculator</h2>
+<p><b>Choosing the stocks.</b> Only counters that qualify for the Top 5 are considered: liquid, profitable ordinary shares with a positive 12-month projection.</p>
+<ul>
+  <li><b>Low risk</b> takes the lowest-risk counters scoring at least 45 (and at or below the median risk), weighted toward the least volatile.</li>
+  <li><b>Steady</b> takes the best risk-adjusted scores, weighted by score.</li>
+  <li><b>High risk</b> takes above-median-risk counters with the largest projected gains, weighted by projected gain.</li>
+</ul>
+<p>Every style holds at most two counters per sector, and each weight stays between 8% and 35%.</p>
+<p><b>Buying.</b> The calculator buys whole shares and charges about 2.1% in trading costs (brokerage plus NSE, CMA and CDSC levies). It charges the same again when you sell.</p>
+<p><b>Simulating.</b> It runs 4,000 simulations in which the counters move together the way they have over the last year.</p>
+<ul>
+  <li>Each counter's typical path follows its daily, weekly, monthly and yearly projections.</li>
+  <li>Because the calculator deliberately picks the counters with the <i>best</i> projections, and those estimates tend to be too high, each pick's path is pulled halfway toward a 7% a year market price return first.</li>
+  <li>Every simulation also draws its own error in the projected return (±15% a year), because the projections themselves are uncertain.</li>
+  <li>Beyond one year, growth fades toward each company's long-run price trend and the 7% anchor, and is capped at 10% a year.</li>
+</ul>
+<p><b>Dividends.</b> Today's dividend per share is added pro rata, less 5% withholding tax.</p>
+<p>The calculator reports the median outcome (half the simulations did better, half worse), the 5th and 95th percentiles, and the chance of ending above the amount you put in.</p>
+<p class="note"><b>This is not investment advice.</b> Models are simplifications, NSE data can be stale or thinly traded, and past returns don't predict future ones.</p>
+</article>
+{% endblock %}

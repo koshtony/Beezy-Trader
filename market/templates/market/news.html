@@ -1,0 +1,13 @@
+{% extends "market/base.html" %}
+{% block title %}News Wire · Beezy Trader{% endblock %}
+{% block content %}
+<h1 class="banner">News</h1>
+<p class="standfirst">Last 60 days, scored for tone.</p>
+<div class="tabs" role="tablist">
+  <button role="tab" class="tab on" hx-get="/api/ui/news?limit=80" hx-target="#wire" data-tabgroup="wire">All</button>
+  <button role="tab" class="tab" hx-get="/api/ui/news?label=positive&limit=80" hx-target="#wire" data-tabgroup="wire">Positive</button>
+  <button role="tab" class="tab" hx-get="/api/ui/news?label=negative&limit=80" hx-target="#wire" data-tabgroup="wire">Negative</button>
+  <button role="tab" class="tab" hx-get="/api/ui/news?label=neutral&limit=80" hx-target="#wire" data-tabgroup="wire">Neutral</button>
+</div>
+<div id="wire" hx-get="/api/ui/news?limit=80" hx-trigger="load"><p class="loading">Loading…</p></div>
+{% endblock %}

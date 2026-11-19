@@ -1,0 +1,44 @@
+{% extends "market/base.html" %}{% load beezy %}
+{% block title %}Stock Screener · Beezy Trader{% endblock %}
+{% block content %}
+<h1 class="banner">Stock screener</h1>
+<p class="standfirst">Click a column to sort.</p>
+
+<form class="filters" hx-get="/api/ui/screener" hx-target="#screener-body" hx-trigger="input changed delay:250ms from:#q, change from:#sector">
+  <label>Search <input id="q" name="q" type="search" placeholder="Ticker or name" autocomplete="off"></label>
+  <label>Sector
+    <select id="sector" name="sector">
+      <option value="">All sectors</option>
+      {% for s in sectors %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <span class="legend"><span class="dot up"></span> liquid <span class="dot flat"></span> thin trade</span>
+</form>
+
+<div class="scroll-x screener-wrap">
+<table class="ledger screener sortable" id="screener">
+  <thead><tr>
+    <th data-sort="text">Counter</th>
+    <th data-sort="text">Sector</th>
+    <th class="n" data-sort="num">Price</th>
+    <th class="n" data-sort="num">Day</th>
+    <th class="n" data-sort="num" title="Price ÷ EPS">P/E</th>
+    <th class="n" data-sort="num" title="P/E ÷ EPS growth">PEG</th>
+    <th class="n" data-sort="num" title="Price ÷ book value">P/B</th>
+    <th class="n" data-sort="num" title="Market cap ÷ revenue">P/S</th>
+    <th class="n" data-sort="num" title="Return on equity">ROE</th>
+    <th class="n" data-sort="num" title="Debt ÷ equity">D/E</th>
+    <th class="n" data-sort="num">Yield</th>
+    <th class="n" data-sort="num" title="Annualised 1-year volatility">Vol.</th>
+    <th class="n" data-sort="num" title="Projected 1-month change">1M proj.</th>
+    <th class="n" data-sort="num" title="Projected 12-month change">1Y proj.</th>
+    <th class="n" data-sort="num" title="News sentiment (-1..1)">News</th>
+    <th class="n" data-sort="num">Score</th>
+    <th class="n" data-sort="num">Risk</th>
+  </tr></thead>
+  <tbody id="screener-body">
+    {% include "market/partials/screener_rows.html" %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
