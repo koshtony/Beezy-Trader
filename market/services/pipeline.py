@@ -7,7 +7,8 @@ from collections import defaultdict
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import close_old_connections, transaction
+from django.db import close_old_connections, connection, transaction
+from django.db.models import Count, Max, Sum
 from django.utils import timezone
 
 from ..models import (
@@ -20,7 +21,7 @@ from ..models import (
     Stock,
     StockAnalytics,
 )
-from . import catalog, ingest, metrics, projections, scoring
+from . import catalog, ingest, locks, metrics, projections, scoring
 
 log = logging.getLogger("market.pipeline")
 
@@ -61,6 +62,8 @@ def _apply_reported_change(tech: dict, s, reported) -> None:
 
 
 def run_analysis(with_backtest: bool = True) -> RecommendationRun:
+    """Rebuild analytics. Backtests are reused when a stock's last price date hasn't changed;
+    with_backtest=False never computes new ones (quick news-only refresh)."""
     with ingest.job("analysis") as jl:
         run = _run_analysis(jl, with_backtest)
         jl.message = f"{len(run.payload.get('universe', []))} stocks analysed"
@@ -90,13 +93,23 @@ def _run_analysis(jl: JobLog, with_backtest: bool) -> RecommendationRun:
         tech = metrics.technicals(s, index_series)
         _apply_reported_change(tech, s, reported.get(st.id))
         val = metrics.valuation(float(s.close[-1]), funds.get(st.id), st.is_financial, st.is_bank)
-        rows.append({"stock": st, "series": s, "tech": tech, "val": val, "sector": st.sector or "Other"})
+        last_date = dt.date.fromisoformat(str(s.dates[-1]))
+        rows.append({"stock": st, "series": s, "tech": tech, "val": val, "sector": st.sector or "Other", "last_date": last_date})
+
+    # Walk-forward backtests take ~85% of the run and only change when a new session is added.
+    last_dates = {r["stock"].id: r["last_date"] for r in rows}
+    prev_bt: dict[int, dict] = defaultdict(dict)
+    for sid, hz, as_of, bt in Projection.objects.filter(as_of__in=set(last_dates.values())).values_list(
+        "stock_id", "horizon", "as_of", "backtest"
+    ):
+        if bt and last_dates.get(sid) == as_of:
+            prev_bt[sid][hz] = bt
 
     medians = scoring.sector_medians(rows)
     min_turnover = settings.BEEZY["MIN_AVG_TURNOVER"]
 
     # pass 2: projections, scores
-    proj_objs, universe = [], []
+    proj_objs, analytics, universe = [], [], []
     for i, r in enumerate(rows, 1):
         st, s, tech, val = r["stock"], r["series"], r["tech"], r["val"]
         if i % 10 == 0:
@@ -104,12 +117,12 @@ def _run_analysis(jl: JobLog, with_backtest: bool) -> RecommendationRun:
             jl.save(update_fields=["progress"])
         med = medians.get(r["sector"], medians["__market__"])
         news = scoring.news_aggregate(news_by.get(st.id, []), now)
-        last_date = dt.date.fromisoformat(str(s.dates[-1]))
+        last_date = r["last_date"]
         proj = projections.project(
             s.close, last_date, valuation=val, sector_pe=med.get("pe"), news_score=news["recent7"]
         )
-        bt = {}
-        if with_backtest and s.n > 300:
+        bt = prev_bt.get(st.id, {})
+        if not bt and with_backtest and s.n > 300:
             for hz in ("1D", "1W", "1M", "1Y"):
                 res = projections.backtest(s.close, hz)
                 if res:
@@ -135,26 +148,26 @@ def _run_analysis(jl: JobLog, with_backtest: bool) -> RecommendationRun:
             warnings.append(f"Last price is {stale_days} days old")
             eligible = False
 
-        StockAnalytics.objects.update_or_create(
-            stock=st,
-            defaults={
-                "as_of": last_date,
-                "last_price": tech.get("last"),
-                "change": tech.get("change"),
-                "change_pct": tech.get("change_pct"),
-                "volume": tech.get("volume"),
-                "metrics": {**val, "verdicts": verdicts, "sector_medians": med},
-                "technicals": tech,
-                "scores": {**scored, "news": news},
-                "composite": scored["composite"],
-                "risk": scored["risk"],
-                "expected_return_1y": proj.get("1Y", {}).get("expected_return"),
-                "expected_return_1m": proj.get("1M", {}).get("expected_return"),
-                "sentiment": news["score"],
-                "is_liquid": liquid,
-                "reasons": reasons,
-                "warnings": warnings,
-            },
+        analytics.append(
+            StockAnalytics(
+                stock=st,
+                as_of=last_date,
+                last_price=tech.get("last"),
+                change=tech.get("change"),
+                change_pct=tech.get("change_pct"),
+                volume=tech.get("volume"),
+                metrics={**val, "verdicts": verdicts, "sector_medians": med},
+                technicals=tech,
+                scores={**scored, "news": news},
+                composite=scored["composite"],
+                risk=scored["risk"],
+                expected_return_1y=proj.get("1Y", {}).get("expected_return"),
+                expected_return_1m=proj.get("1M", {}).get("expected_return"),
+                sentiment=news["score"],
+                is_liquid=liquid,
+                reasons=reasons,
+                warnings=warnings,
+            )
         )
         for hz, p in proj.items():
             proj_objs.append(
@@ -199,26 +212,31 @@ def _run_analysis(jl: JobLog, with_backtest: bool) -> RecommendationRun:
             }
         )
 
-    with transaction.atomic():
-        for p in proj_objs:
-            Projection.objects.update_or_create(
-                stock=p.stock,
-                horizon=p.horizon,
-                as_of=p.as_of,
-                defaults={
-                    f: getattr(p, f)
-                    for f in (
-                        "target_date", "base_price", "expected_price", "low", "high",
-                        "expected_return", "prob_up", "components", "backtest",
-                    )
-                },
-            )
-
     payload = build_recommendations(universe)
     payload["medians"] = medians
     payload["index"] = _index_summary(index_series, reported.get(index.id) if index else None)
-    as_of = max((dt.date.fromisoformat(str(r["series"].dates[-1])) for r in rows), default=None)
-    return RecommendationRun.objects.create(as_of=as_of, payload=payload)
+    as_of = max((r["last_date"] for r in rows), default=None)
+
+    # One short write transaction: readers see the old analysis or the new one, never a mix.
+    with transaction.atomic():
+        StockAnalytics.objects.bulk_create(
+            analytics, update_conflicts=True, unique_fields=["stock"], update_fields=ANALYTICS_FIELDS
+        )
+        Projection.objects.bulk_create(
+            proj_objs, batch_size=500, update_conflicts=True,
+            unique_fields=["stock", "horizon", "as_of"], update_fields=PROJECTION_FIELDS,
+        )
+        return RecommendationRun.objects.create(as_of=as_of, payload=payload)
+
+
+ANALYTICS_FIELDS = [
+    "as_of", "last_price", "change", "change_pct", "volume", "metrics", "technicals", "scores", "composite",
+    "risk", "expected_return_1y", "expected_return_1m", "sentiment", "is_liquid", "reasons", "warnings", "computed_at",
+]
+PROJECTION_FIELDS = [
+    "target_date", "base_price", "expected_price", "low", "high", "expected_return", "prob_up",
+    "components", "backtest", "created_at",
+]
 
 
 def build_recommendations(universe: list[dict]) -> dict:
@@ -273,27 +291,116 @@ def _index_summary(s, reported=None):
 
 
 # ------------------------------------------------------------------ orchestration
-def daily_refresh(*, news: bool = True, force_fundamentals: bool = False) -> str:
-    parts = []
+REANALYSE_AFTER = dt.timedelta(hours=6)  # re-run even without new data (news decay, code updates)
+
+
+def _price_fingerprint():
+    since = timezone.localdate() - dt.timedelta(days=10)
+    return tuple(
+        PriceBar.objects.filter(date__gte=since)
+        .aggregate(n=Count("id"), d=Max("date"), c=Sum("close"), v=Sum("volume"), ch=Sum("change"))
+        .values()
+    )
+
+
+def _analysis_is_fresh() -> bool:
+    last = RecommendationRun.objects.order_by("-created_at").values_list("created_at", flat=True).first()
+    return last is not None and timezone.now() - last < REANALYSE_AFTER
+
+
+def daily_refresh(*, news: bool = True, force_fundamentals: bool = False, full_news: bool | None = None) -> str:
+    """Prices → (new listings' history) → (stale fundamentals) → news → analysis → daily pruning."""
+    with ingest.job("refresh") as jl:
+        jl.message = _daily_refresh(news, force_fundamentals, full_news)
+        return jl.message
+
+
+def _daily_refresh(news: bool, force_fundamentals: bool, full_news: bool | None) -> str:
+    parts, changed = [], False
+    before = _price_fingerprint()
     n = ingest.update_daily_prices()
-    parts.append(f"{n} closes")
+    moved = _price_fingerprint() != before
+    changed |= moved
+    parts.append(f"{n} closes" + ("" if moved else " (unchanged)"))
     missing = Stock.objects.filter(
         kind=Stock.KIND_EQUITY, is_suspended=False, history_backfilled_at__isnull=True
     ).count()
     if missing and missing <= 5:  # new listings: backfill a few (60s each)
         ingest.backfill_history(only_missing=True)
         parts.append(f"backfilled {missing} new listings")
+        changed = True
     stale = timezone.now() - dt.timedelta(days=7)
     if force_fundamentals or not Fundamentals.objects.filter(fetched_at__gte=stale).exists():
         parts.append(f"fundamentals {ingest.update_fundamentals()}")
+        changed = True
     if news:
-        parts.append(f"{ingest.update_news()} headlines")
-    run = run_analysis()
-    parts.append("top5: " + ", ".join(p["ticker"] for p in run.payload.get("top5", [])))
+        added = ingest.update_news(full=full_news)
+        parts.append(f"{added} headlines")
+        changed |= added > 0
+    if changed or not _analysis_is_fresh():
+        run = run_analysis()
+        parts.append("top5: " + ", ".join(p["ticker"] for p in run.payload.get("top5", [])))
+    else:
+        parts.append("analysis skipped (nothing new)")
+    if not JobLog.objects.filter(job="prune", started_at__gte=timezone.now() - dt.timedelta(hours=20)).exists():
+        prune()
     return "; ".join(parts)
 
 
-_bg_lock = threading.Lock()
+def prune(now=None) -> str:
+    """Drop rows nothing reads any more. Price history is never pruned."""
+    keep = settings.BEEZY["KEEP_DAYS"]
+    now = now or timezone.now()
+    with ingest.job("prune") as jl:
+        # analysis runs: everything from the last 2 days, then the last run of each day
+        last_of_day: dict[dt.date, int] = {}
+        old = RecommendationRun.objects.filter(created_at__lt=now - dt.timedelta(days=2)).order_by("created_at")
+        for rid, created in old.values_list("id", "created_at"):
+            last_of_day[timezone.localtime(created).date()] = rid
+        cutoff = timezone.localtime(now).date() - dt.timedelta(days=keep["runs"])
+        keep_ids = [rid for day, rid in last_of_day.items() if day >= cutoff]
+        runs = old.exclude(id__in=keep_ids).delete()[0]
+        jobs = JobLog.objects.filter(started_at__lt=now - dt.timedelta(days=keep["jobs"])).exclude(
+            status=JobLog.RUNNING
+        ).delete()[0]
+        projs = Projection.objects.filter(as_of__lt=now.date() - dt.timedelta(days=keep["projections"])).delete()[0]
+        heads = NewsArticle.objects.filter(published_at__lt=now - dt.timedelta(days=keep["news"])).delete()[0]
+        with connection.cursor() as c:
+            c.execute("PRAGMA optimize")
+        jl.message = f"removed {runs} runs, {jobs} job logs, {projs} projections, {heads} headlines"
+        return jl.message
+
+
+def needs_bootstrap() -> bool:
+    """An empty or mostly history-less database that hasn't been seeded in the last day."""
+    missing = Stock.objects.filter(kind=Stock.KIND_EQUITY, is_suspended=False, history_backfilled_at__isnull=True).count()
+    empty = not Stock.objects.exists()
+    if not (empty or missing > 5):
+        return False
+    return not JobLog.objects.filter(job="history", started_at__gte=timezone.now() - dt.timedelta(hours=20)).exists()
+
+
+def bootstrap(history: bool = True) -> str:
+    """First-time load. History respects AFX's 60s crawl delay (≈75 min, resumable);
+    fundamentals and news run alongside it."""
+    ingest.update_daily_prices()
+
+    def side():
+        try:
+            ingest.update_fundamentals()
+            ingest.update_news(full=True)
+        except Exception:
+            log.exception("bootstrap side jobs failed")
+        finally:
+            connection.close()
+
+    t = threading.Thread(target=side, daemon=True, name="beezy-bootstrap-side")
+    t.start()
+    if history:
+        ingest.backfill_history(only_missing=True)
+    t.join()
+    run = run_analysis()
+    return "bootstrap done; top5: " + ", ".join(p["ticker"] for p in run.payload.get("top5", []))
 
 
 def running_job():
@@ -301,10 +408,9 @@ def running_job():
 
 
 def start_background(kind: str) -> bool:
-    """Run a refresh in a daemon thread (for the UI button). Returns False if one is running."""
-    if running_job() is not None:  # e.g. a CLI backfill in another process
-        return False
-    if not _bg_lock.acquire(blocking=False):
+    """Run a refresh in a daemon thread (UI button / API). False if any job is already running,
+    in this process or another (scheduler, cron, CLI)."""
+    if not locks.acquire_jobs(0):
         return False
 
     def work():
@@ -324,7 +430,11 @@ def start_background(kind: str) -> bool:
             log.exception("background %s failed", kind)
         finally:
             close_old_connections()
-            _bg_lock.release()
+            locks.release_jobs()
 
-    threading.Thread(target=work, daemon=True, name=f"beezy-{kind}").start()
+    try:
+        threading.Thread(target=work, daemon=True, name=f"beezy-{kind}").start()
+    except Exception:
+        locks.release_jobs()
+        raise
     return True

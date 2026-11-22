@@ -1,4 +1,4 @@
-"""Django settings for Beezy Trader — a Nairobi Securities Exchange trading assistant."""
+"""Django settings for Beezy Markets (NSE stocks). Everything deploy-specific comes from environment variables."""
 
 import os
 from pathlib import Path
@@ -12,7 +12,19 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", DEV_SECRET)
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 if not DEBUG and SECRET_KEY == DEV_SECRET:
     raise ImproperlyConfigured("Set DJANGO_SECRET_KEY when DJANGO_DEBUG=0.")
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
+CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+
+# Railway: trust its generated domain and health checker without extra configuration.
+ON_RAILWAY = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+if os.environ.get("RAILWAY_PUBLIC_DOMAIN"):
+    ALLOWED_HOSTS.append(os.environ["RAILWAY_PUBLIC_DOMAIN"])
+    CSRF_TRUSTED_ORIGINS.append(f"https://{os.environ['RAILWAY_PUBLIC_DOMAIN']}")
+if ON_RAILWAY:
+    ALLOWED_HOSTS.append("healthcheck.railway.app")
+
+# The database and job locks live here; point it at a persistent volume in production.
+DATA_DIR = Path(os.environ.get("BEEZY_DATA_DIR", BASE_DIR))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -52,6 +64,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "market.context_processors.asset_version",
             ],
         },
     },
@@ -62,13 +75,16 @@ WSGI_APPLICATION = "beezy.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.environ.get("BEEZY_DB_PATH", BASE_DIR / "db.sqlite3"),
+        "NAME": os.environ.get("BEEZY_DB_PATH", DATA_DIR / "db.sqlite3"),
         "OPTIONS": {
             # WAL lets the web server read while a scrape/analysis job writes.
             "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
             "transaction_mode": "IMMEDIATE",
             "timeout": 30,
         },
+        # Reuse connections between requests (skips reconnect + PRAGMAs); 0 in development.
+        "CONN_MAX_AGE": 0 if DEBUG else 300,
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
@@ -113,7 +129,12 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {"simple": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "simple"}},
-    "loggers": {"market": {"handlers": ["console"], "level": "INFO"}},
+    "loggers": {
+        "market": {"handlers": ["console"], "level": os.environ.get("BEEZY_LOG_LEVEL", "INFO"), "propagate": False},
+        # 500s reach the platform logs in production too (4xx from bots would only be noise).
+        "django": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        "gunicorn.error": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
 }
 
 # --- Production hardening (active when DJANGO_DEBUG=0) ----------------------------------
@@ -121,16 +142,18 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SSL_REDIRECT", "1") == "1"
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+    SECURE_REDIRECT_EXEMPT = [r"^healthz$"]  # platform health checks call over plain HTTP
+    # HSTS covers this host only: *.up.railway.app is shared, and preloading needs a domain you own.
+    SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
-    CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o]
 SESSION_COOKIE_HTTPONLY = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 # Behind a reverse proxy set this to the number of proxies so rate limits see the real client IP.
-NINJA_NUM_PROXIES = int(os.environ.get("BEEZY_NUM_PROXIES", "0"))
+NINJA_NUM_PROXIES = int(os.environ.get("BEEZY_NUM_PROXIES", "1" if ON_RAILWAY else "0"))
 
-# --- Beezy Trader data-source settings -------------------------------------------------
+# --- Beezy Markets data-source settings -------------------------------------------------
 BEEZY = {
     # afx.kwayisi.org publishes "Crawl-delay: 60" in robots.txt — we honour it.
     "AFX_BASE": "https://afx.kwayisi.org",
@@ -139,7 +162,7 @@ BEEZY = {
     "STOCKANALYSIS_DELAY": float(os.environ.get("BEEZY_SA_DELAY", "2.5")),
     "NEWS_DELAY": float(os.environ.get("BEEZY_NEWS_DELAY", "1.5")),
     "NEWS_LOOKBACK_DAYS": 60,
-    "USER_AGENT": "BeezyTrader/1.0 (personal NSE research tool; low-frequency)",
+    "USER_AGENT": "BeezyMarkets/1.0 (personal NSE research tool; low-frequency)",
     "HTTP_TIMEOUT": 30,
     # Liquidity floor for recommendations: average daily turnover (KES) over 30 sessions.
     "MIN_AVG_TURNOVER": 500_000,
@@ -147,4 +170,10 @@ BEEZY = {
     "API_KEY": os.environ.get("BEEZY_API_KEY", ""),
     # Interactive docs at /api/docs are on in DEBUG; set BEEZY_API_DOCS=1 to keep them in production.
     "API_DOCS": os.environ.get("BEEZY_API_DOCS", "0") == "1",
+    # Run the 08:30 / 12:30 / 17:30 refresh inside the web process (for single-container hosts).
+    "SCHEDULER": os.environ.get("BEEZY_SCHEDULER", "0") == "1",
+    # Seed an empty database automatically (≈75 min, AFX crawl delay) when the scheduler starts.
+    "AUTO_BOOTSTRAP": os.environ.get("BEEZY_AUTO_BOOTSTRAP", "1") == "1",
+    # Old rows pruned once a day (price history is never pruned).
+    "KEEP_DAYS": {"runs": 90, "jobs": 60, "projections": 400, "news": 730},
 }

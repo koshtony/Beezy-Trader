@@ -1,0 +1,40 @@
+{% load beezy %}<section>
+  <form class="filters" hx-get="/api/ui/experiments/markov" hx-target="#exp-panel" hx-trigger="change">
+    <label>Series
+      <select name="ticker">
+        {% for c in x.choices %}<option value="{{ c.ticker }}"{% if c.ticker == x.ticker %} selected{% endif %}>{{ c.ticker }} · {{ c.name|truncatechars:28 }}</option>{% endfor %}
+      </select>
+    </label>
+  </form>
+  <div class="tiles">
+    <div class="tile hero-tile"><div class="label">Today → tomorrow</div><div class="value hero">{{ x.current }}</div><div class="sub">most likely next: {{ x.likely_next }} ({{ x.likely_next_p|pctu }})</div></div>
+    <div class="tile"><div class="label">Chance up tomorrow</div><div class="value {% if x.p_up_1 > x.up_base %}up{% else %}down{% endif %}">{{ x.p_up_1|pctu }}</div><div class="sub">long-run {{ x.up_base|pctu }} · in 5d {{ x.p_up_5|pctu }}</div></div>
+    <div class="tile"><div class="label">Memory test</div><div class="value">{% if x.has_memory %}Has memory{% else %}No memory{% endif %}</div><div class="sub">χ² p = {{ x.p_value|stringformat:".2g" }}{% if x.half_life %} · half-life {{ x.half_life|num:1 }}d{% endif %}</div></div>
+    <div class="tile"><div class="label">After an up day</div><div class="value">{{ x.up_after_up|pctu }}</div><div class="sub">up again (vs {{ x.up_base|pctu }} normally)</div></div>
+  </div>
+</section>
+<div class="two-col">
+  <section class="card">
+    <h2 class="section-head">Transition matrix · today (rows) → tomorrow</h2>
+    <div class="scroll-x">
+    <table class="ledger heat">
+      <thead><tr><th></th>{% for s in x.states %}<th class="n">{{ s }}</th>{% endfor %}<th class="n">Days</th></tr></thead>
+      <tbody>
+      {% for row in x.matrix %}
+        <tr{% if forloop.counter0 == x.current_index %} class="current"{% endif %}><th scope="row">{{ row.state }}</th>
+          {% for c in row.cells %}<td class="n heat-cell{% if c.p > 0.45 %} hot{% endif %}" style="--p: {{ c.p|floatformat:3 }}" title="{{ c.n }} transitions">{{ c.p|pctu }}</td>{% endfor %}
+          <td class="n muted">{{ row.n }}</td></tr>
+      {% endfor %}
+        <tr class="stationary"><th scope="row">Long run π</th>{% for p in x.stationary %}<td class="n">{{ p|pctu }}</td>{% endfor %}<td></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">States by daily move vs σ ({{ x.sigma|pctu:2 }}): big ±1σ, flat ±0.2σ. {{ x.n_days }} days to {{ x.end }}.</p>
+  </section>
+  <section class="card">
+    <h2 class="section-head">Tomorrow vs long run</h2>
+    <div id="exp-next" class="chart short" role="img" aria-label="Tomorrow's state probabilities compared with the long-run distribution"></div>
+  </section>
+</div>
+<section class="card"><h2 class="section-head">Markov-simulated 21 days · {{ x.ticker }}</h2><div id="exp-fan" class="chart" role="img" aria-label="Simulated price paths from the Markov chain"></div></section>
+{{ x|json_script:"exp-data" }}

@@ -20,13 +20,14 @@ from .schemas import (
     StockRow,
     SummarySchema,
 )
-from .security import API_THROTTLE, CALC_THROTTLE, JOB_AUTH
+from .security import API_THROTTLE, CALC_THROTTLE, DOWNLOAD_THROTTLE, JOB_AUTH
 from .services import pipeline
+from .services.experiments import ExperimentError
 from .services.portfolio import CalculatorError
 from .ui import router as ui_router
 
 api = NinjaAPI(
-    title="Beezy Trader API",
+    title="Beezy Markets API",
     version="1.0.0",
     description=(
         "Nairobi Securities Exchange trading assistant: daily prices, fundamentals, valuation "
@@ -132,6 +133,55 @@ def calculator(
         return queries.calculator(amount, profile, horizon, unit, costs)
     except CalculatorError as exc:
         raise HttpError(400, str(exc))
+
+
+@router.get("/experiments/{kind}", summary="PCA, eigenvalue spectrum, Markov chain, forecast accuracy, or plain-language notes")
+def experiment(request: HttpRequest, kind: Literal["pca", "eigen", "markov", "accuracy", "notes"], ticker: str = "NASI"):
+    try:
+        return queries.experiment(kind, ticker.upper() if kind == "markov" else "")
+    except ExperimentError as exc:
+        raise HttpError(400, str(exc))
+
+
+@router.get(
+    "/download/{dataset}",
+    throttle=DOWNLOAD_THROTTLE,
+    summary="Download a dataset as CSV (Excel) or JSON",
+)
+def download(
+    request: HttpRequest,
+    dataset: Literal["stocks", "prices", "fundamentals", "projections", "accuracy", "news", "picks", "pca", "eigenvalues", "markov", "glossary"],
+    format: Literal["csv", "json"] = "csv",
+    ticker: str = "",
+    start: str = "",
+    end: str = "",
+    label: str = "",
+):
+    import datetime as dt
+    import re
+
+    from .downloads import DATASETS, Params, respond
+    from .services.experiments import ExperimentError as ExpErr
+
+    t = ticker.strip().upper()
+    if t and not re.fullmatch(r"[A-Z0-9.\-]{1,16}", t):
+        raise HttpError(400, "Invalid ticker")
+    try:
+        s = dt.date.fromisoformat(start) if start else None
+        e = dt.date.fromisoformat(end) if end else None
+    except ValueError:
+        raise HttpError(400, "Dates must be YYYY-MM-DD")
+    try:
+        return respond(DATASETS[dataset], Params(ticker=t, start=s, end=e, label=label), format)
+    except ExpErr as exc:
+        raise HttpError(400, str(exc))
+
+
+@router.get("/glossary", summary="Every term used on the site")
+def glossary(request: HttpRequest):
+    from .glossary import flat
+
+    return flat()
 
 
 @router.get("/jobs", summary="Recent scrape / analysis jobs")

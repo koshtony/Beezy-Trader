@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Beezy Trader · NSE{% endblock %}</title>
+  <title>{% block title %}Beezy Markets · NSE Stocks{% endblock %}</title>
   <meta name="description" content="Nairobi Securities Exchange trading assistant — valuation, projections, news, picks and a portfolio calculator.">
   <link rel="icon" type="image/png" href="{% static 'market/img/favicon.png' %}">
   <script>
@@ -13,7 +13,7 @@
       if (["bw", "navy", "light"].includes(t)) document.documentElement.className = "theme-" + t;
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="{% static 'market/app.css' %}">
+  <link rel="stylesheet" href="{% static 'market/app.css' %}?v={{ asset_v }}">
   <script src="{% static 'market/vendor/htmx.min.js' %}" defer></script>
   {% block head %}{% endblock %}
 </head>
@@ -22,9 +22,9 @@
 
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="{% url 'dashboard' %}" aria-label="Beezy Trader home">
+      <a class="brand" href="{% url 'dashboard' %}" aria-label="Beezy Markets home">
         <img src="{% static 'market/img/bee.png' %}" alt="" width="32" height="32">
-        <span>BEEZY TRADER</span>
+        <span class="brand-text"><b>BEEZY MARKETS</b><small>NSE STOCKS</small></span>
       </a>
       <div class="topbar-tools">
         <form class="jump" onsubmit="event.preventDefault(); const t=this.t.value.trim().toUpperCase(); if(t) location.href='/stocks/'+encodeURIComponent(t)+'/';">
@@ -51,6 +51,7 @@
 
   <footer class="colophon">
     <p><strong>Not investment advice.</strong> Data: AFX · stockanalysis.com · Google News ·
+      <a class="linkish" href="{% url 'data' %}?tab=glossary">Glossary</a> ·
       <button type="button" class="linkish" data-open-disclaimer>Disclaimer</button></p>
   </footer>
 
@@ -58,23 +59,31 @@
   <nav class="app-nav" aria-label="Main">
     <a href="{% url 'dashboard' %}" class="app-nav-item{% if nav == 'dashboard' %} is-active{% endif %}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-      <span>Dashboard</span>
+      <span class="lbl">Dashboard</span><span class="lbl-s">Home</span>
     </a>
     <a href="{% url 'screener' %}" class="app-nav-item{% if nav == 'screener' or nav == 'stock' %} is-active{% endif %}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-      <span>Screener</span>
+      <span class="lbl">Screener</span><span class="lbl-s">Screen</span>
     </a>
     <a href="{% url 'calculator' %}" class="app-nav-item{% if nav == 'calculator' %} is-active{% endif %}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-      <span>Calculator</span>
+      <span class="lbl">Calculator</span><span class="lbl-s">Calc</span>
+    </a>
+    <a href="{% url 'experiments' %}" class="app-nav-item{% if nav == 'experiments' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6m-5 0v6.5L4.5 19a1.5 1.5 0 001.3 2.2h12.4a1.5 1.5 0 001.3-2.2L14 9.5V3M7.5 15h9"/></svg>
+      <span class="lbl">Labs</span><span class="lbl-s">Labs</span>
     </a>
     <a href="{% url 'news' %}" class="app-nav-item{% if nav == 'news' %} is-active{% endif %}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
-      <span>News</span>
+      <span class="lbl">News</span><span class="lbl-s">News</span>
+    </a>
+    <a href="{% url 'data' %}" class="app-nav-item{% if nav == 'data' %} is-active{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+      <span class="lbl">Data</span><span class="lbl-s">Data</span>
     </a>
     <a href="{% url 'method' %}" class="app-nav-item{% if nav == 'method' %} is-active{% endif %}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-      <span>Method</span>
+      <span class="lbl">Method</span><span class="lbl-s">Guide</span>
     </a>
   </nav>
 
@@ -89,7 +98,7 @@
         </div>
       </div>
       <ul>
-        <li><b>Not financial advice.</b> Beezy Trader is an educational research tool. Nothing here is a recommendation or an offer to buy or sell any security.</li>
+        <li><b>Not financial advice.</b> Beezy Markets is an educational research tool. Nothing here is a recommendation or an offer to buy or sell any security.</li>
         <li><b>Projections are estimates, not promises.</b> They come from statistical models of past prices, company figures and news tone. Real outcomes can be far worse than the ranges shown.</li>
         <li><b>Your capital is at risk.</b> Share prices can fall as well as rise, and you may get back less than you invest. Past performance does not predict future returns.</li>
         <li><b>Data may be delayed or wrong.</b> Prices are end-of-day and come from third-party websites, as do fundamentals and headlines. Always check against official NSE and company filings.</li>
@@ -101,7 +110,7 @@
     </div>
   </dialog>
 
-  <script src="{% static 'market/app.js' %}" defer></script>
+  <script src="{% static 'market/app.js' %}?v={{ asset_v }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

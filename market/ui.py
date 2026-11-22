@@ -7,6 +7,7 @@ from ninja import Router
 from . import queries
 from .security import CALC_THROTTLE, JOB_AUTH, can_trigger_jobs
 from .services import pipeline
+from .services.experiments import ExperimentError
 from .services.portfolio import PROFILES, CalculatorError
 
 router = Router(tags=["ui-fragments"])
@@ -54,6 +55,43 @@ def calculator(request: HttpRequest, amount: str = "100000", profile: str = "ste
     except (ValueError, CalculatorError) as exc:
         ctx["error"] = str(exc) if isinstance(exc, CalculatorError) else "Enter a valid amount and period."
     return _html("calculator_result.html", ctx, request)
+
+
+@router.get("/experiments/{kind}", response=None, include_in_schema=False)
+def experiment(request: HttpRequest, kind: str, ticker: str = "NASI"):
+    if kind not in ("pca", "eigen", "markov", "accuracy", "notes"):
+        kind = "pca"
+    try:
+        data = queries.experiment(kind, ticker.upper()[:16] if kind == "markov" else "")
+        return _html(f"exp_{kind}.html", {"x": data, "kind": kind}, request)
+    except ExperimentError as exc:
+        return _html("exp_error.html", {"error": str(exc)}, request)
+
+
+@router.get("/data-preview/{dataset}", response=None, include_in_schema=False)
+def data_preview(request: HttpRequest, dataset: str, ticker: str = "", start: str = "", end: str = "", label: str = ""):
+    import datetime as dt
+    from itertools import islice
+
+    from .downloads import DATASETS, Params, human
+    from .services.experiments import ExperimentError as ExpErr
+
+    ds = DATASETS.get(dataset)
+    if ds is None:
+        return _html("exp_error.html", {"error": "Unknown dataset."}, request)
+    try:
+        params = Params(
+            ticker=ticker.strip().upper()[:16],
+            start=dt.date.fromisoformat(start) if start else None,
+            end=dt.date.fromisoformat(end) if end else None,
+            label=label,
+        )
+        rows = list(islice(ds.rows(params), 8))
+    except (ValueError, ExpErr) as exc:
+        return _html("exp_error.html", {"error": str(exc) or "Invalid filter."}, request)
+    cols = list(rows[0].keys()) if rows else []
+    table = [[human(r.get(c)) for c in cols] for r in rows]
+    return _html("data_preview.html", {"cols": cols, "rows": table}, request)
 
 
 @router.get("/status", response=None, include_in_schema=False)

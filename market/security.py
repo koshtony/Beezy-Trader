@@ -34,6 +34,7 @@ JOB_AUTH = [ApiKey(), django_auth_is_staff, local_dev]
 # Applied to the whole API; the expensive calculator gets a tighter limit of its own.
 API_THROTTLE = [AnonRateThrottle("240/m"), AuthRateThrottle("1000/m")]
 CALC_THROTTLE = [AnonRateThrottle("30/m"), AuthRateThrottle("120/m")]
+DOWNLOAD_THROTTLE = [AnonRateThrottle("20/m"), AuthRateThrottle("100/m")]
 
 
 def can_trigger_jobs(request) -> bool:

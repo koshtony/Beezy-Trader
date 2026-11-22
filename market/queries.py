@@ -10,19 +10,29 @@ from django.utils import timezone
 
 from .models import JobLog, NewsArticle, PriceBar, Projection, RecommendationRun, Stock, StockAnalytics
 from .security import safe_url
-from .services import catalog, pipeline, portfolio
+from .services import accuracy, catalog, experiments, pipeline, portfolio
 
 HORIZON_ORDER = {"1D": 0, "1W": 1, "1M": 2, "1Y": 3}
 
 
+def data_version() -> int:
+    """Id of the latest analysis run, re-read at most every 10 s. Part of every cache key, so a run
+    finished by another process (scheduler, cron, another web worker) shows up within seconds."""
+    v = cache.get("bz:ver")
+    if v is None:
+        v = RecommendationRun.objects.order_by("-id").values_list("id", flat=True).first() or 0
+        cache.set("bz:ver", v, 10)
+    return v
+
+
 def cached(prefix: str, ttl: int = 300):
-    """Cache a function's return value keyed by its arguments. Cleared after each analysis."""
+    """Cache a function's return value keyed by its arguments and the data version."""
 
     def deco(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             raw = repr((args, sorted(kwargs.items())))
-            key = f"bz:{prefix}:{hashlib.md5(raw.encode()).hexdigest()}"
+            key = f"bz:{prefix}:{data_version()}:{hashlib.md5(raw.encode()).hexdigest()}"
             hit = cache.get(key)
             if hit is not None:
                 return hit
@@ -333,6 +343,41 @@ def calculator(amount: float, profile: str, horizon: float, unit: str, costs: bo
     result["compare"] = portfolio.compare(amount, horizon, unit, include_costs=costs)
     cache.set(key, result, 600)
     return result
+
+
+def experiment(kind: str, ticker: str = "") -> dict:
+    """Cached experiment results, refreshed whenever a new analysis run lands."""
+    run = latest_run()
+    key = f"bz:exp:{run.pk if run else 0}:{kind}:{ticker}"
+    hit = cache.get(key)
+    if hit is None and kind == "notes":
+        parts, errors = {}, {}
+        for k in ("pca", "eigen", "markov"):
+            try:
+                parts[k] = experiment(k)
+            except experiments.ExperimentError as exc:
+                errors[k] = str(exc)
+        from .services import notes
+
+        hit = notes.build(parts.get("pca"), parts.get("eigen"), parts.get("markov"), errors,
+                          acc=experiment("accuracy")["notes"])
+        hit["as_of"] = run.as_of.isoformat() if run and run.as_of else None
+        cache.set(key, hit, 3600)
+    if hit is None:
+        if kind == "pca":
+            hit = experiments.pca()
+        elif kind == "eigen":
+            hit = experiments.eigen()
+        elif kind == "accuracy":
+            hit = accuracy.report()
+        else:
+            choices = experiments.markov_tickers()
+            if (ticker or "NASI") == "NASI" and choices and choices[0]["ticker"] != "NASI":
+                ticker = choices[0]["ticker"]  # no index history yet: default to the first counter
+            hit = experiments.markov(ticker or "NASI")
+            hit["choices"] = choices
+        cache.set(key, hit, 3600)
+    return hit
 
 
 def job_status() -> dict:

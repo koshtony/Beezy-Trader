@@ -1,6 +1,6 @@
-# Beezy Trader — NSE trading assistant
+# Beezy Markets — NSE stocks
 
-A Django + Django Ninja app for the **Nairobi Securities Exchange**. It does the following:
+**Beezy Markets** is a Django + Django Ninja stock analysis app for the **Nairobi Securities Exchange**. It does the following:
 
 * scrapes **daily closing prices** and keeps about **10 years of history** per stock in the database
 * scrapes **fundamentals** and computes the key investor metrics with the live price:
@@ -18,6 +18,11 @@ A Django + Django Ninja app for the **Nairobi Securities Exchange**. It does the
   shares after NSE trading costs, and runs 4,000 simulated futures (dividends included, after
   withholding tax). It shows the likely value, the bad and good cases, the chance of profit, and
   milestones along the way.
+* has an **Experiments** page with three tabs:
+  * **PCA**: the market factor, independent bets, a stock map and loadings
+  * **Eigenvalues**: the eigenvalue spectrum against the Marchenko–Pastur noise bound, plus the absorption ratio over time
+  * **Markov chain**: the 5-state transition matrix, the long-run distribution, a χ² memory test, memory half-life and simulated paths
+* has a **Data** page for downloading every dataset as CSV (Excel-ready) or JSON, with ticker, date and tone filters, plus a searchable **glossary** of about 120 terms
 * shows a **disclaimer on first visit**, which must be acknowledged once and is remembered for a year
 
 The front end is server-rendered HTML styled with the **Beezy theme family** shared with Beezy
@@ -55,18 +60,42 @@ see the app sooner, run `python manage.py bootstrap --no-history`, then
 | `scrape_prices` | Today's NSE price list (one request) |
 | `backfill_history [TICKERS…] [--missing]` | ~10 years of daily closes per stock, plus the NASI index |
 | `scrape_fundamentals [TICKERS…]` | Statistics and EPS history from stockanalysis.com |
-| `scrape_news [TICKERS…] [--rescore]` | Google News headlines with sentiment labels (`--rescore` relabels stored headlines) |
-| `analyze` | Recomputes metrics, projections, backtests, scores and picks |
-| `refresh` | The daily job: prices → news → (fundamentals if older than 7 days) → analysis |
-| `run_scheduler [--now daily\|news\|weekly]` | A built-in scheduler loop, if you'd rather not use cron |
+| `scrape_news [TICKERS…] [--quick] [--rescore]` | Google News headlines with sentiment labels (`--quick`: combined queries over recent days; `--rescore` relabels stored headlines) |
+| `analyze [--backtest]` | Recomputes metrics, projections, scores and picks (`--backtest` recomputes today's backtests too) |
+| `refresh [--full-news] [--wait N]` | The scheduled job: prices → news → (fundamentals if older than 7 days) → analysis if anything changed |
+| `run_scheduler [--now daily\|news\|weekly]` | The scheduler in the foreground, if you'd rather not use cron |
+| `snapshot_db [FILE]` | A consistent copy of the database (safe while running), e.g. to seed a server |
 
-### Scheduling with cron (Africa/Nairobi time; the NSE closes at 15:00)
+Only one data job runs at a time, whether it comes from the web server, the scheduler, cron or a
+command. A second job waits for the first (commands) or is refused (buttons).
+
+### Scheduling (08:30, 12:30 and 17:30 Nairobi time, every day)
+
+Each run does prices → news → analysis, and refreshes fundamentals once they are older than 7 days.
+NSE trading hours are 09:30–15:00, so the three runs fetch the previous close, the intraday prices and the official close.
+
+What a routine run costs:
+
+* **Prices**: one request.
+* **News**: about 20 requests and 30 s. Busy names get their own query; quiet ones share combined
+  `"A" OR "B" …` queries that cover only the days since the last run. Once a week a full sweep
+  queries every stock over 60 days. If Google answers 429, the run waits and slows down instead of
+  dropping headlines.
+* **Analysis**: about 0.6 s. Walk-forward backtests are reused until a new session is added. The
+  analysis is skipped when prices, news and fundamentals are all unchanged, unless the last
+  analysis is more than 6 hours old.
+* **Pruning**: once a day, old analysis runs (90 days), job logs (60), projections (400) and
+  headlines (2 years) are removed. Price history is never pruned.
+
+On a server the scheduler runs inside the web process (see [Deploying](#deploying-railway)). On a
+laptop, use cron:
 
 ```cron
-30 15 * * 1-5  cd /path/to/Beezy-Trader && .venv/bin/python manage.py refresh
-0 10,13,18 * * 1-5  cd /path/to/Beezy-Trader && .venv/bin/python manage.py scrape_news && .venv/bin/python manage.py analyze
-0 8 * * 6  cd /path/to/Beezy-Trader && .venv/bin/python manage.py scrape_fundamentals && .venv/bin/python manage.py backfill_history --missing && .venv/bin/python manage.py analyze
+30 8,12,17 * * * cd /path/to/Beezy-Trader && .venv/bin/python manage.py refresh >> logs/cron.log 2>&1 # beezy-trader
 ```
+
+Cron skips runs while the machine is asleep. `python manage.py run_scheduler` catches up on a
+missed slot as soon as it can.
 
 The **Update prices** and **Update news** buttons in the app run the same jobs in the background.
 The page polls the job's progress and reloads when it finishes.
@@ -87,6 +116,9 @@ Interactive docs are at **`/api/docs`**. JSON endpoints:
 | `GET /api/movers?kind=gainers\|losers\|active\|volatile\|ytd` | Market movers |
 | `GET /api/recommendations` · `GET /api/recommendations/scatter` | Top 5 and the risk-profile picks |
 | `GET /api/calculator?amount=&profile=low\|steady\|high&horizon=&unit=days\|weeks\|months\|years&costs=` | Portfolio simulation, milestones and a comparison of the three styles |
+| `GET /api/experiments/pca\|eigen\|markov\|accuracy\|notes?ticker=` | PCA, eigenvalue spectrum and absorption ratio, Markov chain, forecast accuracy, plain-language notes |
+| `GET /api/download/{dataset}?format=csv\|json&ticker=&start=&end=&label=` | Downloads: stocks, prices, fundamentals, projections, accuracy, news, picks, pca, eigenvalues, markov, glossary |
+| `GET /api/glossary` | Every term with its definition |
 | `GET /api/jobs` · `POST /api/jobs/refresh?kind=prices\|news\|analysis\|daily` | Job status and triggers |
 
 HTMX fragments are served by the same Ninja API under `/api/ui/…`.
@@ -133,8 +165,58 @@ market/
   tests/               python manage.py test market
 ```
 
-## Production notes
+## Deploying (Railway)
 
-Set `DJANGO_DEBUG=0`, `DJANGO_SECRET_KEY` and `DJANGO_ALLOWED_HOSTS`, run `collectstatic`, and serve
-with gunicorn. WhiteNoise then serves compressed static files with long cache lifetimes. SQLite runs
-in WAL mode so the site can be read while jobs write.
+The repo ships a `Dockerfile`, `railway.json` and `gunicorn.conf.py`. One container serves the site
+and runs the 08:30 / 12:30 / 17:30 refreshes in-process. SQLite lives on a volume. A separate cron
+service can't work, because a Railway volume attaches to only one service.
+
+1. **Create the service.** New project → Deploy from GitHub repo (or `railway up` from this folder).
+   Railway finds the Dockerfile and `railway.json`, which sets the `/healthz` health check and
+   restart-on-failure.
+2. **Add a volume** to the service, mounted at **`/data`**.
+3. **Set variables.** `DJANGO_SECRET_KEY` is required; generate one with
+   `python -c "import secrets; print(secrets.token_urlsafe(50))"`. Everything else is optional; see
+   `.env.example`. The generated `*.up.railway.app` domain is trusted automatically. For a custom
+   domain, add it to `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS`.
+4. **Generate a domain** (Settings → Networking) and deploy.
+5. **Load the data**, choosing one of:
+   * *Automatic*: an empty database bootstraps itself on first start (about 75 minutes because of
+     AFX's crawl delay; resumes after a restart). The site shows data as it arrives.
+   * *Seed from your machine*: `python manage.py snapshot_db seed.sqlite3`, then
+     `railway volume files upload seed.sqlite3 /seed.sqlite3` and restart the service. The seed is
+     installed only while production has no price data yet.
+
+Start-up runs `migrate`, then gunicorn: one process with 8 threads, about 100 MB at rest. That is
+enough for this traffic and keeps the scheduler, job runner and page cache in one process. Redeploys
+are safe. An interrupted job is marked "interrupted", and a refresh slot missed while the service was
+down runs as soon as it is back.
+
+**Security in production** (`DJANGO_DEBUG=0`):
+
+* HTTPS redirect, HSTS, secure cookies and `X-Frame-Options: DENY`.
+* API docs are hidden (`BEEZY_API_DOCS=1` shows them).
+* The refresh endpoints need staff login or `BEEZY_API_KEY`.
+* Rate limits see the real client IP behind Railway's proxy.
+
+**Your local database never reaches production.** `.gitignore`, `.railwayignore` and `.dockerignore`
+all exclude `*.sqlite3`. The image reads only `/data/db.sqlite3` on the volume. Deploys change the
+code and run migrations; the data itself is untouched. On every start (`manage.py prepare_data`):
+
+* An uploaded `seed.sqlite3` is **refused** once production has price data. It is set aside as
+  `seed.sqlite3.refused-*`. To replace production on purpose, set `BEEZY_ALLOW_SEED=1`, upload,
+  restart, then remove the variable. The replaced database is kept as `db.sqlite3.before-seed-*`.
+* When a deploy brings new migrations, the database is first copied to
+  `/data/backups/before-migrate-*.sqlite3` (newest 5 kept).
+
+**Backups:** use Railway's volume backups, or download a snapshot. In `railway ssh`, run
+`python manage.py snapshot_db /data/backup.sqlite3`. Then, on your machine, run
+`railway volume files download /backup.sqlite3 ./backup.sqlite3`.
+
+### Other hosts
+
+Any Docker host works: `docker build -t beezy . && docker run -p 8000:8000 -v beezy-data:/data -e DJANGO_SECRET_KEY=… beezy`.
+Without Docker, set `DJANGO_DEBUG=0`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `BEEZY_DATA_DIR`
+and `BEEZY_SCHEDULER=1`, run `collectstatic` and `migrate`, then `gunicorn beezy.wsgi -c gunicorn.conf.py`.
+WhiteNoise serves hashed, compressed static files with long cache lifetimes. SQLite runs in WAL mode,
+so the site stays readable while jobs write.

@@ -1,0 +1,16 @@
+{% extends "market/base.html" %}{% load static %}
+{% block title %}Experiments · Beezy Markets{% endblock %}
+{% block head %}<script src="{% static 'market/vendor/plotly-basic.min.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="kicker">Labs</div>
+<h1 class="banner">Experiments</h1>
+<p class="standfirst">Quant views of the NSE: hidden factors, signal vs noise, day-to-day memory, and how past forecasts turned out.</p>
+<div class="tabs scroll-tabs" role="tablist">
+  <a role="tab" class="tab{% if tab == 'pca' %} on{% endif %}" href="/experiments/?tab=pca" data-tabgroup="exp" hx-get="/api/ui/experiments/pca" hx-target="#exp-panel" hx-push-url="/experiments/?tab=pca">PCA</a>
+  <a role="tab" class="tab{% if tab == 'eigen' %} on{% endif %}" href="/experiments/?tab=eigen" data-tabgroup="exp" hx-get="/api/ui/experiments/eigen" hx-target="#exp-panel" hx-push-url="/experiments/?tab=eigen">Eigenvalues</a>
+  <a role="tab" class="tab{% if tab == 'markov' %} on{% endif %}" href="/experiments/?tab=markov" data-tabgroup="exp" hx-get="/api/ui/experiments/markov" hx-target="#exp-panel" hx-push-url="/experiments/?tab=markov">Markov chain</a>
+  <a role="tab" class="tab{% if tab == 'accuracy' %} on{% endif %}" href="/experiments/?tab=accuracy" data-tabgroup="exp" hx-get="/api/ui/experiments/accuracy" hx-target="#exp-panel" hx-push-url="/experiments/?tab=accuracy">Accuracy</a>
+  <a role="tab" class="tab{% if tab == 'notes' %} on{% endif %}" href="/experiments/?tab=notes" data-tabgroup="exp" hx-get="/api/ui/experiments/notes" hx-target="#exp-panel" hx-push-url="/experiments/?tab=notes">Notes</a>
+</div>
+<div id="exp-panel" hx-get="/api/ui/experiments/{{ tab }}" hx-trigger="load"><p class="loading">Computing…</p></div>
+{% endblock %}

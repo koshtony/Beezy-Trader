@@ -31,7 +31,7 @@ def ensure_cert() -> tuple[Path, Path]:
         [
             "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "825",
             "-keyout", str(key), "-out", str(cert),
-            "-subj", "/CN=Beezy Trader (local)",
+            "-subj", "/CN=Beezy Markets (local)",
             "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1",
         ],
         check=True,

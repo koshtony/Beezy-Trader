@@ -1,0 +1,13 @@
+{% load beezy %}<section>
+  <div class="tiles">
+    <div class="tile hero-tile"><div class="label">Real factors</div><div class="value hero">{{ x.signal }}</div><div class="sub">eigenvalues above the noise bound</div></div>
+    <div class="tile"><div class="label">Largest eigenvalue</div><div class="value">{{ x.market_mode|num }}</div><div class="sub">{{ x.market_share|pctu:1 }} of total</div></div>
+    <div class="tile"><div class="label">Noise bound λ+</div><div class="value">{{ x.lambda_plus|num }}</div><div class="sub">Marchenko–Pastur, N={{ x.n_stocks }}, T={{ x.n_days }}</div></div>
+    <div class="tile"><div class="label">Absorption ratio</div><div class="value">{{ x.ar_now|pctu:1 }}</div><div class="sub">{% if x.ar_percentile is not None %}{{ x.ar_percentile|pctu }} percentile{% if x.ar_change_3m is not None %} · {{ x.ar_change_3m|pct:1 }} in 3 mo{% endif %}{% endif %}</div></div>
+  </div>
+</section>
+<section class="card"><h2 class="section-head">Eigenvalue spectrum vs random noise</h2><div id="exp-spectrum" class="chart" role="img" aria-label="Eigenvalues of the correlation matrix with the random-noise bound"></div>
+  <p class="note">Bars above the line carry real structure; the rest is indistinguishable from noise.</p></section>
+<section class="card"><h2 class="section-head">Absorption ratio · how tightly stocks move together</h2><div id="exp-ar" class="chart" role="img" aria-label="Absorption ratio over time"></div>
+  <p class="note">Top {{ x.absorption.k }} of {{ x.absorption.n }} eigenvectors, rolling 6 months. Higher = more fragile market.</p></section>
+{{ x|json_script:"exp-data" }}

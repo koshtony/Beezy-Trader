@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+db.sqlite3*
+seed.sqlite3
+*.sqlite3
+staticfiles
+logs
+.certs
+.env
+.claude
+Dockerfile
+.dockerignore

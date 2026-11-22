@@ -1,4 +1,4 @@
-/* Beezy Trader front-end: vanilla JS + HTMX + Plotly (basic bundle). */
+/* Beezy Markets front-end: vanilla JS + HTMX + Plotly (basic bundle). */
 (function () {
   "use strict";
 
@@ -20,6 +20,7 @@
       s1: light ? "#2a78d6" : "#3987e5",
       s2: light ? "#eb6834" : "#d95926",
       s3: light ? "#1baf7a" : "#199e70",
+      neg: light ? "#e34948" : "#e66767", // diverging pole opposite blue
       s1Fill: light ? "rgba(42,120,214,.16)" : "rgba(57,135,229,.22)",
       s1FillStrong: light ? "rgba(42,120,214,.30)" : "rgba(57,135,229,.38)",
     };
@@ -304,8 +305,144 @@
     timer = setTimeout(() => { b.style.opacity = "0"; setTimeout(() => { b.style.width = "0"; }, 300); }, 200);
   });
   document.addEventListener("htmx:afterSwap", (e) => {
-    if (e.detail.target && e.detail.target.id === "calc-result") calcChart();
+    const id = e.detail.target && e.detail.target.id;
+    if (id === "calc-result") calcChart();
+    if (id === "exp-panel") expCharts();
   });
+
+  // ------------------------------------------------------------ experiments
+  function fanTraces(C, f, ref, refName) {
+    const band = (lo, hi, name, fill) => [
+      { type: "scatter", mode: "lines", x: f.dates, y: lo, line: { width: 0, color: C.s1 }, hoverinfo: "skip", showlegend: false },
+      { type: "scatter", mode: "lines", name, x: f.dates, y: hi, fill: "tonexty", fillcolor: fill, line: { width: 0, color: C.s1 }, hoverinfo: "skip" },
+    ];
+    return [
+      ...band(f.p5, f.p95, "90% of paths", C.s1Fill),
+      ...band(f.p25, f.p75, "Middle half", C.s1FillStrong),
+      { type: "scatter", mode: "lines", name: "Median", x: f.dates, y: f.p50, line: { color: C.s1, width: 2.5 }, hovertemplate: "%{x|%d %b}<br>%{y:,.2f}<extra></extra>" },
+      { type: "scatter", mode: "lines", name: refName, x: [f.dates[0], f.dates[f.dates.length - 1]], y: [ref, ref], line: { color: C.muted, width: 1.5, dash: "dash" }, hoverinfo: "skip" },
+    ];
+  }
+  function loadingBars(el, comp) {
+    draw(el, (C) => {
+      const items = comp.loadings;
+      const L = baseLayout(C, { showlegend: false, bargap: 0.25, hovermode: "closest" });
+      L.xaxis.tickangle = -60; L.xaxis.tickfont = { family: MONO, size: 9, color: C.muted };
+      Object.assign(L.yaxis, { zeroline: true, zerolinecolor: C.lineStrong, title: { text: "Loading", font: { size: 11, color: C.muted } } });
+      L.margin = { l: 56, r: 10, t: 10, b: 64 };
+      Plotly.react(el, [{
+        type: "bar", x: items.map((i) => i.ticker), y: items.map((i) => i.loading),
+        marker: { color: items.map((i) => (i.loading >= 0 ? C.s1 : C.neg)) },
+        customdata: items.map((i) => [i.name, i.sector]),
+        hovertemplate: "<b>%{x}</b> %{customdata[0]}<br>%{customdata[1]}<br>loading %{y:.2f}<extra></extra>",
+      }], L, CONFIG);
+    });
+  }
+  function expCharts() {
+    const src = document.getElementById("exp-data");
+    if (!src || !window.Plotly) return;
+    const x = JSON.parse(src.textContent);
+    const el = (id) => document.getElementById(id);
+
+    if (el("exp-variance")) draw(el("exp-variance"), (C) => {
+      const lab = x.explained.map((_, i) => "PC" + (i + 1));
+      const L = baseLayout(C, { hovermode: "x unified", bargap: 0.3 });
+      Object.assign(L.yaxis, { ticksuffix: "%", range: [0, 100] });
+      Plotly.react(el("exp-variance"), [
+        { type: "bar", name: "Each component", x: lab, y: x.explained.map((v) => v * 100), marker: { color: C.s1 }, hovertemplate: "%{y:.1f}%<extra>Each</extra>" },
+        { type: "scatter", mode: "lines+markers", name: "Cumulative", x: lab, y: x.cumulative.map((v) => v * 100), line: { color: C.muted, width: 2 }, marker: { size: 8, color: C.muted, line: { color: C.bg, width: 2 } }, hovertemplate: "%{y:.1f}%<extra>Cumulative</extra>" },
+      ], L, CONFIG);
+    });
+    if (el("exp-map")) draw(el("exp-map"), (C) => {
+      const groups = [...x.top_sectors, "Other"];
+      const colors = [C.s1, C.s2, C.s3, C.muted];
+      const traces = groups.map((g, i) => {
+        const pts = x.map.filter((p) => p.group === g);
+        return {
+          type: "scatter", mode: "markers+text", name: g, x: pts.map((p) => p.pc1), y: pts.map((p) => p.pc2),
+          text: pts.map((p) => p.ticker), textposition: "top center", textfont: { family: MONO, size: 9, color: C.ink2 },
+          marker: { size: 10, color: colors[i], line: { color: C.bg, width: 2 } },
+          customdata: pts.map((p) => [p.name, p.sector]),
+          hovertemplate: "<b>%{text}</b> %{customdata[0]}<br>%{customdata[1]}<br>PC1 %{x:.2f} · PC2 %{y:.2f}<extra></extra>",
+        };
+      }).filter((t) => t.x.length);
+      const L = baseLayout(C, { hovermode: "closest" });
+      L.xaxis.title = { text: "PC1 loading (market)", font: { size: 11, color: C.muted } };
+      Object.assign(L.xaxis, { zeroline: true, zerolinecolor: C.lineStrong });
+      Object.assign(L.yaxis, { zeroline: true, zerolinecolor: C.lineStrong, title: { text: "PC2 loading", font: { size: 11, color: C.muted } } });
+      L.margin = { l: 56, r: 16, t: 16, b: 84 };
+      L.legend.y = -0.25;
+      Plotly.react(el("exp-map"), traces, L, CONFIG);
+    });
+    if (el("exp-pc1")) loadingBars(el("exp-pc1"), x.components[0]);
+    if (el("exp-pc2") && x.components[1]) loadingBars(el("exp-pc2"), x.components[1]);
+
+    if (el("exp-spectrum")) draw(el("exp-spectrum"), (C) => {
+      const idx = x.eigenvalues.map((_, i) => i + 1);
+      const sig = x.eigenvalues.map((v) => (v > x.lambda_plus ? v : null));
+      const noise = x.eigenvalues.map((v) => (v > x.lambda_plus ? null : v));
+      const L = baseLayout(C, { barmode: "overlay", bargap: 0.2, hovermode: "closest" });
+      L.xaxis.title = { text: "Eigenvalue rank", font: { size: 11, color: C.muted } };
+      L.yaxis.title = { text: "Eigenvalue", font: { size: 11, color: C.muted } };
+      Plotly.react(el("exp-spectrum"), [
+        { type: "bar", name: "Signal", x: idx, y: sig, marker: { color: C.s1 }, hovertemplate: "λ%{x} = %{y:.2f}<extra>Signal</extra>" },
+        { type: "bar", name: "Noise", x: idx, y: noise, marker: { color: C.lineStrong }, hovertemplate: "λ%{x} = %{y:.2f}<extra>Noise</extra>" },
+        { type: "scatter", mode: "lines", name: "Noise bound λ+", x: [0.5, idx.length + 0.5], y: [x.lambda_plus, x.lambda_plus], line: { color: C.ink2, width: 1.5, dash: "dash" }, hoverinfo: "skip" },
+      ], L, CONFIG);
+    });
+    if (el("exp-ar") && x.absorption && x.absorption.dates.length) draw(el("exp-ar"), (C) => {
+      const a = x.absorption;
+      const L = baseLayout(C, { hovermode: "x" });
+      Object.assign(L.yaxis, { tickformat: ".0%" });
+      L.xaxis.type = "date";
+      Plotly.react(el("exp-ar"), [
+        { type: "scatter", mode: "lines", name: "Absorption ratio", x: a.dates, y: a.ar, line: { color: C.s1, width: 2 }, hovertemplate: "%{x|%d %b %Y}<br>%{y:.1%}<extra></extra>" },
+        { type: "scatter", mode: "lines", name: "Average", x: [a.dates[0], a.dates[a.dates.length - 1]], y: [x.ar_mean, x.ar_mean], line: { color: C.muted, width: 1.5, dash: "dash" }, hoverinfo: "skip" },
+      ], L, CONFIG);
+    });
+
+    if (el("exp-next")) draw(el("exp-next"), (C) => {
+      const L = baseLayout(C, { barmode: "group", bargap: 0.25, hovermode: "x unified" });
+      Object.assign(L.yaxis, { ticksuffix: "%" });
+      Plotly.react(el("exp-next"), [
+        { type: "bar", name: "Tomorrow (after " + x.current + ")", x: x.states, y: x.next.map((v) => v * 100), marker: { color: C.s1 }, hovertemplate: "%{y:.1f}%<extra>Tomorrow</extra>" },
+        { type: "bar", name: "Long run", x: x.states, y: x.stationary.map((v) => v * 100), marker: { color: C.lineStrong }, hovertemplate: "%{y:.1f}%<extra>Long run</extra>" },
+      ], L, CONFIG);
+    });
+    if (x.scatter) Object.entries(x.scatter).forEach(([h, pts]) => {
+      const box = el("exp-acc-" + h);
+      if (!box || !pts.length) return;
+      draw(box, (C) => {
+        const pct = (v) => v * 100;
+        const group = (inside, name, color) => {
+          const g = pts.filter((p) => p.in === inside);
+          return {
+            type: "scatter", mode: "markers", name, x: g.map((p) => pct(p.f)), y: g.map((p) => pct(p.a)), text: g.map((p) => p.t),
+            marker: { size: 9, color, line: { color: C.bg, width: 1.5 } },
+            hovertemplate: "<b>%{text}</b><br>forecast %{x:+.2f}%<br>actual %{y:+.2f}%<extra>" + name + "</extra>",
+          };
+        };
+        const xs = pts.map((p) => pct(p.f));
+        const lo = Math.min(...xs), hi = Math.max(...xs);
+        const L = baseLayout(C, { hovermode: "closest" });
+        Object.assign(L.xaxis, { ticksuffix: "%", zeroline: true, zerolinecolor: C.lineStrong, title: { text: "Forecast change", font: { size: 11, color: C.muted } } });
+        Object.assign(L.yaxis, { ticksuffix: "%", zeroline: true, zerolinecolor: C.lineStrong, title: { text: "Actual change", font: { size: 11, color: C.muted } } });
+        L.margin = { l: 56, r: 16, t: 10, b: 84 };
+        L.legend.y = -0.32;
+        Plotly.react(box, [
+          group(true, "Inside 90% range", C.s1),
+          group(false, "Outside range", C.s2),
+          { type: "scatter", mode: "lines", name: "Perfect forecast", x: [lo, hi], y: [lo, hi], line: { color: C.muted, width: 1.5, dash: "dash" }, hoverinfo: "skip" },
+        ], L, CONFIG);
+      });
+    });
+
+    if (el("exp-fan")) draw(el("exp-fan"), (C) => {
+      const L = baseLayout(C, { hovermode: "x" });
+      L.xaxis.type = "date";
+      Plotly.react(el("exp-fan"), fanTraces(C, x.fan, x.last_price, "Last close"), L, CONFIG);
+    });
+  }
 
   // ------------------------------------------------------------ disclaimer (first visit)
   const COOKIE = "bz_disclaimer";
@@ -384,5 +521,52 @@
     if (st) sortTable(table, st.col, st.type, st.dir);
   });
 
-  window.Beezy = { scatter, stockCharts, calcChart, setTheme, openDisclaimer, kes };
+  // ------------------------------------------------------------ in-page tabs (Data page) + glossary search
+  function showPanel(id) {
+    const tabs = document.querySelector("[data-local-tabs]");
+    if (!tabs || !document.getElementById(id)) return;
+    tabs.querySelectorAll("[data-show]").forEach((b) => {
+      const on = b.dataset.show === id;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      if (on && tabs.scrollWidth > tabs.clientWidth) {
+        tabs.scrollTo({ left: b.offsetLeft - (tabs.clientWidth - b.offsetWidth) / 2, behavior: "smooth" });
+      }
+    });
+    document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.id !== id; });
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-local-tabs] [data-show]");
+    if (!b || e.ctrlKey || e.metaKey || e.shiftKey) return; // let modified clicks open a new tab
+    e.preventDefault();
+    showPanel(b.dataset.show);
+    history.replaceState(null, "", "?tab=" + b.dataset.show);
+  });
+  function fromHash() {
+    const h = location.hash.slice(1);
+    if (!h) return;
+    if (document.getElementById(h) && document.getElementById(h).hasAttribute("data-panel")) showPanel(h);
+    else if (h.startsWith("g-")) showPanel("glossary");
+  }
+  document.addEventListener("DOMContentLoaded", fromHash);
+  window.addEventListener("hashchange", fromHash);
+  document.addEventListener("input", (e) => {
+    if (e.target.id !== "glossary-search") return;
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    document.querySelectorAll(".glossary-group").forEach((g) => {
+      let n = 0;
+      g.querySelectorAll("[data-term]").forEach((row) => {
+        const hit = !q || row.dataset.term.includes(q);
+        row.hidden = !hit;
+        n += hit ? 1 : 0;
+      });
+      g.hidden = n === 0;
+      shown += n;
+    });
+    const empty = document.getElementById("glossary-empty");
+    if (empty) empty.hidden = shown > 0;
+  });
+
+  window.Beezy = { scatter, stockCharts, calcChart, expCharts, setTheme, openDisclaimer, kes };
 })();

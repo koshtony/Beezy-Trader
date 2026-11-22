@@ -31,9 +31,25 @@ class Headline:
     terms: list[str]
 
 
-def feed_url(phrase: str, context: str = "") -> str:
-    days = settings.BEEZY["NEWS_LOOKBACK_DAYS"]
-    q = quote_plus(f'"{phrase}" {context} when:{days}d'.replace("  ", " "))
+FEED_CAP = 100  # Google News returns at most this many items per feed
+
+
+def query(phrases: str | list[str], context: str = "", days: int | None = None) -> str:
+    """`"A" OR "B" Kenya when:2d` — Google binds OR tighter than the implicit AND."""
+    days = days or settings.BEEZY["NEWS_LOOKBACK_DAYS"]
+    if isinstance(phrases, str):
+        phrases = [phrases]
+    names = " OR ".join(f'"{p}"' for p in phrases)
+    return " ".join(x for x in (names, context, f"when:{days}d") if x)
+
+
+def query_words(phrases: list[str], context: str = "") -> int:
+    """Words a query uses (Google ignores anything past 32)."""
+    return sum(len(p.split()) for p in phrases) + max(0, len(phrases) - 1) + len(context.split()) + 1
+
+
+def feed_url(phrases: str | list[str], context: str = "", days: int | None = None) -> str:
+    q = quote_plus(query(phrases, context, days))
     return f"https://news.google.com/rss/search?q={q}&hl=en-KE&gl=KE&ceid=KE:en"
 
 
@@ -86,6 +102,22 @@ def _contains(text: str, term: str) -> bool:
 FOREIGN_MARKERS = (" rbi ", " india", " mysuru", " tsxv", " nasdaq", " nyse:", " asx", " lse:", " pakistan", " sri lanka", " philippines")
 
 
-def fetch(phrase: str, match_terms: list[str], context: str = "") -> list[Headline]:
-    items = parse_feed(http.fetch(feed_url(phrase, context)), match_terms)
+def _local(items: list[Headline]) -> list[Headline]:
     return [h for h in items if not any(m in f" {h.title.lower()} " for m in FOREIGN_MARKERS)]
+
+
+def fetch(phrase: str, match_terms: list[str], context: str = "", days: int | None = None) -> list[Headline]:
+    return _local(parse_feed(http.fetch(feed_url(phrase, context, days)), match_terms))
+
+
+def split_feed(xml_text: str, wanted: dict[str, list[str]]) -> tuple[dict[str, list[Headline]], bool]:
+    """Assign one combined feed's headlines to each key whose match terms appear in the title.
+
+    Returns (headlines per key, whether the feed hit Google's item cap and may be incomplete)."""
+    items = _local(parse_feed(xml_text, []))
+    out = {k: [h for h in items if any(_contains(h.title.lower(), t) for t in terms)] for k, terms in wanted.items()}
+    return out, xml_text.count("<item>") >= FEED_CAP - 5
+
+
+def fetch_group(phrases: list[str], wanted: dict[str, list[str]], context: str, days: int):
+    return split_feed(http.fetch(feed_url(phrases, context, days)), wanted)

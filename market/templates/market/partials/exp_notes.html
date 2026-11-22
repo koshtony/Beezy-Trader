@@ -1,0 +1,29 @@
+<div class="notes">
+  {% for k, msg in x.errors.items %}<div class="error-box">{{ k|upper }}: {{ msg }}</div>{% endfor %}
+  {% if x.bottom_line %}
+  <section class="card notes-bottom">
+    <h2 class="section-head">Bottom line{% if x.as_of %} · data to {{ x.as_of }}{% endif %}</h2>
+    <ul class="why">{% for b in x.bottom_line %}<li>{{ b }}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+  {% for s in x.sections %}
+  <section class="card note-card">
+    <div class="note-head">
+      <h2 class="section-head">{{ s.title }}</h2>
+      <a class="btn" href="/experiments/?tab={{ s.key }}">Open tab →</a>
+    </div>
+    <p class="note-lede">{{ s.measures }}</p>
+    <div class="note-cols">
+      <div><h3 class="mini-head">What the results say</h3><ul class="note-list">{% for f in s.findings %}<li>{{ f }}</li>{% endfor %}</ul></div>
+      <div><h3 class="mini-head">What it means for you</h3><ul class="why">{% for m in s.meaning %}<li>{{ m }}</li>{% endfor %}</ul>
+        <h3 class="mini-head" style="margin-top:14px">Keep in mind</h3><ul class="watch">{% for c in s.caveats %}<li>{{ c }}</li>{% endfor %}</ul></div>
+    </div>
+  </section>
+  {% endfor %}
+  <div class="two-col">
+    <section class="card"><h2 class="section-head">How the three fit together</h2>
+      <ul class="note-list">{% for t in x.together %}<li>{{ t }}</li>{% endfor %}</ul></section>
+    <section class="card"><h2 class="section-head">Glossary</h2>
+      <dl class="glossary">{% for term, d in x.glossary %}<div><dt>{{ term }}</dt><dd>{{ d }}</dd></div>{% endfor %}</dl></section>
+  </div>
+</div>

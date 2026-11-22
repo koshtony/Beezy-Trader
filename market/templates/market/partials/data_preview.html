@@ -1,0 +1,7 @@
+{% if rows %}<div class="scroll-x">
+<table class="ledger compact preview">
+  <thead><tr>{% for c in cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for r in rows %}<tr>{% for text, is_num in r %}<td{% if is_num %} class="n"{% endif %}>{{ text|truncatechars:60 }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table></div>
+<p class="note">Preview of the first {{ rows|length }} rows · {{ cols|length }} columns.</p>
+{% else %}<p class="empty">No rows match these filters.</p>{% endif %}

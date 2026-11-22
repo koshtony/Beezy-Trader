@@ -1,0 +1,96 @@
+{% load beezy %}<section>
+  {% if x.headline %}{% with h=x.headline %}
+  <div class="tiles">
+    <div class="tile hero-tile"><div class="label">Price accuracy · {{ h.adj }}</div><div class="value hero">{{ h.accuracy|pctu:1 }}</div><div class="sub">off by {{ h.error|pctu:1 }} on average · {{ h.n }} forecasts</div></div>
+    <div class="tile"><div class="label">Direction right</div><div class="value {% if h.direction >= 0.5 %}up{% else %}down{% endif %}">{{ h.direction|pctu }}</div><div class="sub">{{ h.right }} of {{ h.moved }} that moved · coin flip 50%</div></div>
+    <div class="tile"><div class="label">Inside 90% range</div><div class="value">{{ h.inside|pctu }}</div><div class="sub">well calibrated ≈ 90%</div></div>
+    <div class="tile"><div class="label">vs no-change guess</div><div class="value {{ h.skill|tone }}">{{ h.skill|pct:0 }}</div><div class="sub">no-change off by {{ h.naive_error|pctu:1 }}</div></div>
+  </div>
+  {% endwith %}{% else %}
+  <p class="empty">No forecast has reached its target date yet{% if x.next_check %}. First check: {{ x.next_check|date:"j M Y" }}{% endif %}.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="section-head">Published forecasts vs actual prices{% if x.through %} · closes to {{ x.through }}{% endif %}</h2>
+  <div class="scroll-x">
+  <table class="ledger">
+    <thead><tr><th>Horizon</th><th class="n">Checked</th><th class="n">Price accuracy</th><th class="n">Avg error</th><th class="n" title="Error if you assumed the price stays the same">No-change error</th><th class="n">Direction right</th><th class="n">Inside range</th><th class="n">Waiting</th><th class="n">Next check</th></tr></thead>
+    <tbody>{% for r in x.horizons %}{% with s=r.live p=r.pending %}
+      <tr><th scope="row">{{ r.label }}</th>
+        <td class="n">{{ s.n }}</td>
+        {% if s.n %}<td class="n">{{ s.accuracy|pctu:1 }}</td><td class="n">{{ s.error|pctu:1 }}</td><td class="n muted">{{ s.naive_error|pctu:1 }}</td>
+        <td class="n">{% if s.moved %}{{ s.direction|pctu }} <span class="muted small">({{ s.right }}/{{ s.moved }})</span>{% else %}—{% endif %}</td><td class="n">{{ s.inside|pctu }}</td>
+        {% else %}<td class="n muted" colspan="5">not due yet</td>{% endif %}
+        <td class="n">{{ p.n }}</td><td class="n">{{ p.next|date:"j M Y"|default:"—" }}</td></tr>
+    {% endwith %}{% endfor %}</tbody>
+  </table>
+  </div>
+  <p class="note">Each forecast is checked against the first official close on or after its target date. Prices that didn't move are left out of "direction right".</p>
+</section>
+
+{% if x.chart.scatter %}
+<div class="two-col">
+  {% for r in x.horizons %}{% if r.live.n %}
+  <section class="card"><h2 class="section-head">{{ r.adj|capfirst }} · forecast vs actual change{% if r.live.batches == 1 %} · made {{ r.live.first_made|date:"j M" }}{% endif %}</h2>
+    <div id="exp-acc-{{ r.key }}" class="chart short" role="img" aria-label="Forecast change compared with actual change for each stock"></div></section>
+  {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+<section class="card">
+  <h2 class="section-head">Backtest · the model replayed over past years</h2>
+  <div class="scroll-x">
+  <table class="ledger">
+    <thead><tr><th>Horizon</th><th class="n">Checks</th><th class="n">Stocks</th><th class="n">Price accuracy</th><th class="n">No-change error</th><th class="n">Direction right</th><th class="n">Unchanged</th><th class="n">Inside range</th><th class="n" title="Share of stocks where the model's error was smaller than a no-change guess">Beat no-change</th></tr></thead>
+    <tbody>{% for r in x.horizons %}{% with b=r.backtest %}
+      <tr><th scope="row">{{ r.label }}</th>
+      {% if b.n %}<td class="n">{{ b.n|num:0 }}</td><td class="n">{{ b.stocks }}</td><td class="n">{{ b.accuracy|pctu:1 }}</td><td class="n muted">{{ b.naive_error|pctu:1 }}</td>
+        <td class="n">{{ b.direction|pctu }}</td><td class="n muted">{{ b.flat|pctu }}</td><td class="n">{{ b.inside|pctu }}</td><td class="n">{{ b.beats_share|pctu }}</td>
+      {% else %}<td class="n muted" colspan="8">not enough history</td>{% endif %}</tr>
+    {% endwith %}{% endfor %}</tbody>
+  </table>
+  </div>
+  <p class="note">Walk-forward: at each past date the model sees only earlier prices, then its call is compared with what followed. Covers the price-history part of the model.</p>
+</section>
+
+{% with s=x.notes %}
+<section class="card note-card">
+  <h2 class="section-head">What it means</h2>
+  <div class="note-cols">
+    <div><h3 class="mini-head">What the results say</h3><ul class="note-list">{% for f in s.findings %}<li>{{ f }}</li>{% endfor %}</ul></div>
+    <div><h3 class="mini-head">What it means for you</h3><ul class="why">{% for m in s.meaning %}<li>{{ m }}</li>{% endfor %}</ul>
+      <h3 class="mini-head" style="margin-top:14px">Keep in mind</h3><ul class="watch">{% for c in s.caveats %}<li>{{ c }}</li>{% endfor %}</ul></div>
+  </div>
+</section>
+{% endwith %}
+
+{% if x.latest %}
+<section class="card">
+  <div class="dl-head">
+    <h2 class="section-head">Latest checked forecasts</h2>
+    <a class="btn" href="/api/download/accuracy?format=csv">Download all (CSV)</a>
+  </div>
+  <div class="scroll-x">
+  <table class="ledger sortable">
+    <thead><tr>
+      <th data-sort="text">Counter</th><th data-sort="text">Horizon</th><th data-sort="text">Made</th><th data-sort="text">Checked</th>
+      <th class="n" data-sort="num">Price then</th><th class="n" data-sort="num">Forecast</th><th class="n" data-sort="num">Actual</th>
+      <th class="n" data-sort="num">Forecast chg</th><th class="n" data-sort="num">Actual chg</th><th class="n" data-sort="num">Error</th>
+      <th data-sort="text">Direction</th><th data-sort="text">Range</th>
+    </tr></thead>
+    <tbody>{% for r in x.latest %}
+      <tr><td><a href="/stocks/{{ r.ticker }}/">{{ r.ticker }}</a></td><td>{{ r.horizon }}</td>
+        <td data-v="{{ r.made|date:'Y-m-d' }}">{{ r.made|date:"j M" }}</td><td data-v="{{ r.target|date:'Y-m-d' }}">{{ r.target|date:"j M" }}</td>
+        <td class="n" data-v="{{ r.base }}">{{ r.base|num }}</td><td class="n" data-v="{{ r.forecast }}">{{ r.forecast|num }}</td><td class="n" data-v="{{ r.actual }}">{{ r.actual|num }}</td>
+        <td class="n {{ r.forecast_change|tone }}" data-v="{{ r.forecast_change }}">{{ r.forecast_change|pct:2 }}</td>
+        <td class="n {{ r.actual_change|tone }}" data-v="{{ r.actual_change }}">{{ r.actual_change|pct:2 }}</td>
+        <td class="n" data-v="{{ r.error }}">{{ r.error|pctu:1 }}</td>
+        <td class="{% if r.direction == 'right' %}up{% elif r.direction == 'wrong' %}down{% else %}muted{% endif %}">{% if r.direction == 'right' %}✓ right{% elif r.direction == 'wrong' %}✗ wrong{% else %}– unchanged{% endif %}</td>
+        <td class="{% if r.in_range %}up{% else %}down{% endif %}">{% if r.in_range %}✓ inside{% else %}✗ outside{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{{ x.chart|json_script:"exp-data" }}

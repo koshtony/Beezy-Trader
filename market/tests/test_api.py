@@ -115,7 +115,7 @@ class PipelineApiTests(TestCase):
         self.assertContains(self.client.get("/api/ui/status"), "statusbar")
 
     def test_pages(self):
-        for url in ("/", "/screener/", "/stocks/GOOD/", "/calculator/", "/news/", "/method/"):
+        for url in ("/", "/screener/", "/stocks/GOOD/", "/calculator/", "/experiments/", "/data/", "/news/", "/method/"):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
         self.assertEqual(self.client.get("/stocks/NOPE/").status_code, 404)
@@ -241,3 +241,139 @@ class CalculatorTests(PipelineApiTests):
         page = self.client.get("/")
         self.assertContains(page, 'id="disclaimer"')  # still available from the footer link
         self.assertNotContains(page, "data-auto-open")
+
+
+class ExperimentTests(PipelineApiTests):
+    def test_pca_eigen_markov_endpoints(self):
+        pca = self.client.get("/api/experiments/pca").json()
+        self.assertEqual(pca["n_stocks"], len(SPECS))
+        self.assertAlmostEqual(sum(pca["eigenvalues"]), len(SPECS), places=3)  # trace of a correlation matrix
+        self.assertAlmostEqual(pca["cumulative"][-1], 1.0, places=3)
+        eig = self.client.get("/api/experiments/eigen").json()
+        self.assertGreater(eig["lambda_plus"], 1.0)
+        mk = self.client.get("/api/experiments/markov?ticker=GOOD").json()
+        self.assertAlmostEqual(sum(mk["stationary"]), 1.0, places=3)
+        for row in mk["P"]:
+            self.assertAlmostEqual(sum(row), 1.0, places=3)
+        self.assertEqual(len(mk["fan"]["dates"]), 22)
+        self.assertEqual(self.client.get("/api/experiments/markov?ticker=NOPE").status_code, 400)
+        self.assertEqual(self.client.get("/api/experiments/bogus").status_code, 422)
+
+    def test_fragments_and_page(self):
+        self.assertContains(self.client.get("/experiments/"), "Experiments")
+        self.assertContains(self.client.get("/experiments/?tab=markov"), "/api/ui/experiments/markov")
+        for kind, marker in (("pca", "exp-variance"), ("eigen", "exp-spectrum"), ("markov", "Transition matrix")):
+            with self.subTest(kind=kind):
+                self.assertContains(self.client.get(f"/api/ui/experiments/{kind}"), marker)
+        self.assertContains(self.client.get("/api/ui/experiments/markov?ticker=NOPE"), "error-box")
+
+
+class SnapshotSessionTests(TestCase):
+    def _snap(self, day, price_shift=0.0, nasi=240.0, nasi_change=-1.0):
+        rows = [afx.ListingRow(f"S{i}", f"Stock {i}", 1000, 10.0 + i + price_shift, 0.5, False) for i in range(8)]
+        return afx.MarketSnapshot(as_of=day, nasi=nasi, nasi_change=nasi_change, market_cap=1e12, rows=rows)
+
+    def test_repeated_session_is_not_a_new_day(self):
+        thu, fri = dt.date(2026, 11, 19), dt.date(2026, 11, 20)
+        ingest.store_snapshot(self._snap(thu))
+        ingest.store_snapshot(self._snap(fri))  # same prices and changes: yesterday repeated
+        self.assertFalse(PriceBar.objects.filter(date=fri).exists())
+        ingest.store_snapshot(self._snap(fri, price_shift=0.25))  # genuine new prices
+        self.assertEqual(PriceBar.objects.filter(date=fri).exclude(stock__ticker="NASI").count(), 8)
+
+    def test_stale_index_and_weekends(self):
+        thu, fri, sat = dt.date(2026, 11, 19), dt.date(2026, 11, 20), dt.date(2026, 11, 21)
+        ingest.store_snapshot(self._snap(thu))
+        ingest.store_snapshot(self._snap(fri, price_shift=0.25))  # stocks moved, NASI not yet updated
+        self.assertFalse(PriceBar.objects.filter(stock__ticker="NASI", date=fri).exists())
+        ingest.store_snapshot(self._snap(sat, price_shift=0.5, nasi=241.0, nasi_change=1.0))
+        self.assertFalse(PriceBar.objects.filter(date=sat).exists())  # weekend folds onto Friday
+        self.assertEqual(PriceBar.objects.get(stock__ticker="NASI", date=fri).close, 241.0)
+
+
+class NotesTests(PipelineApiTests):
+    def test_notes_tab(self):
+        data = self.client.get("/api/experiments/notes").json()
+        self.assertEqual([s["key"] for s in data["sections"]], ["pca", "eigen", "markov", "accuracy"])
+        for s in data["sections"]:
+            self.assertTrue(s["findings"] and s["meaning"] and s["caveats"])
+        self.assertTrue(data["bottom_line"])
+        frag = self.client.get("/api/ui/experiments/notes")
+        self.assertContains(frag, "What the results say")
+        self.assertContains(frag, "Glossary")
+        self.assertContains(self.client.get("/experiments/?tab=notes"), "/api/ui/experiments/notes")
+
+
+class DownloadTests(PipelineApiTests):
+    def _csv(self, url):
+        import csv as _csv
+        import io
+
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, 200, url)
+        self.assertIn("attachment;", r["Content-Disposition"])
+        body = b"".join(r.streaming_content).decode("utf-8-sig")
+        return list(_csv.DictReader(io.StringIO(body)))
+
+    def test_every_dataset_downloads(self):
+        from market.downloads import DATASETS
+
+        for key in DATASETS:
+            with self.subTest(dataset=key):
+                rows = self._csv(f"/api/download/{key}?ticker=GOOD" if key == "markov" else f"/api/download/{key}")
+                self.assertTrue(rows or key == "accuracy", key)  # no forecast has matured in this fixture
+        js = self.client.get("/api/download/stocks?format=json")
+        self.assertEqual(len(js.json()), len(SPECS))
+        self.assertIn(".json", js["Content-Disposition"])
+
+    def test_filters(self):
+        rows = self._csv("/api/download/prices?ticker=good&start=2026-01-01&end=")
+        self.assertTrue(rows)
+        self.assertEqual({r["ticker"] for r in rows}, {"GOOD"})
+        self.assertTrue(all(r["date"] >= "2026-01-01" for r in rows))
+        neg = self._csv("/api/download/news?label=negative")
+        self.assertEqual({r["ticker"] for r in neg}, {"LOSS"})
+        self.assertEqual(self.client.get("/api/download/prices?start=yesterday").status_code, 400)
+        self.assertEqual(self.client.get("/api/download/prices?ticker=../etc").status_code, 400)
+        self.assertEqual(self.client.get("/api/download/secrets").status_code, 422)
+
+    def test_csv_formula_injection_is_neutralised(self):
+        st = Stock.objects.get(ticker="GOOD")
+        NewsArticle.objects.create(stock=st, title='=HYPERLINK("http://evil","click")', url="https://ex.com/x",
+                                   published_at=timezone.now(), label="neutral")
+        rows = self._csv("/api/download/news?ticker=GOOD")
+        titles = [r["title"] for r in rows]
+        self.assertIn("'=HYPERLINK(\"http://evil\",\"click\")", titles)
+        self.assertFalse(any(t.startswith("=") for t in titles))
+
+    def test_data_page_and_glossary(self):
+        from market.glossary import flat
+
+        page = self.client.get("/data/")
+        self.assertContains(page, "Download CSV")
+        self.assertContains(page, "Marchenko–Pastur")
+        self.assertContains(page, 'action="/api/download/prices"')
+        self.assertGreater(len(self.client.get("/api/glossary").json()), 100)
+        terms = {g["term"] for g in flat()}
+        for must in ("P/E", "PEG", "ROE", "Free cash flow (FCF)", "Debt-to-equity (D/E)", "Dividend yield", "Volatility",
+                     "Eigenvalue", "Markov chain", "Absorption ratio", "Beezy score", "Monte Carlo simulation"):
+            self.assertIn(must, terms)
+
+    def test_downloads_are_rate_limited(self):
+        cache.clear()
+        codes = [self.client.get("/api/download/glossary").status_code for _ in range(22)]
+        self.assertIn(429, codes)
+
+
+class DataPreviewTests(PipelineApiTests):
+    def test_preview_fragment(self):
+        r = self.client.get("/api/ui/data-preview/prices?ticker=GOOD&start=&end=")
+        self.assertContains(r, "<table")
+        self.assertContains(r, "GOOD")
+        self.assertContains(r, "first 8 rows")
+        self.assertContains(self.client.get("/api/ui/data-preview/news?label=negative"), "LOSS")
+        self.assertContains(self.client.get("/api/ui/data-preview/prices?start=nope"), "error-box")
+        self.assertContains(self.client.get("/api/ui/data-preview/bogus"), "Unknown dataset")
+        page = self.client.get("/data/")
+        self.assertContains(page, 'data-show="markov"')
+        self.assertContains(page, 'hx-trigger="intersect once"')

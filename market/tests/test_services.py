@@ -283,3 +283,49 @@ class ScoringTests(SimpleTestCase):
         self.assertFalse(scoring.is_liquid({"avg_turnover": 1e5, "volume_days": 10, "active_ratio": 0.8}, 5e5))
         self.assertFalse(scoring.is_liquid({"avg_turnover": 5e4, "volume_days": 1, "active_ratio": 0.9}, 5e5))
         self.assertTrue(scoring.is_liquid({"avg_turnover": None, "volume_days": 0, "active_ratio": 0.7}, 5e5))
+
+
+class ExperimentMathTests(SimpleTestCase):
+    def test_pca_recovers_planted_market_factor(self):
+        from market.services.experiments import _eig
+
+        rng = np.random.default_rng(1)
+        T, N = 500, 20
+        market = rng.normal(0, 0.01, T)
+        R = 0.8 * market[:, None] + rng.normal(0, 0.006, (T, N))
+        vals, vecs = _eig(np.corrcoef(R, rowvar=False))
+        self.assertGreater(vals[0] / vals.sum(), 0.5)
+        self.assertTrue((vecs[:, 0] > 0).all())  # sign convention: market factor positive
+        lam_plus = (1 + (N / T) ** 0.5) ** 2
+        self.assertEqual(int((vals > lam_plus).sum()), 1)  # exactly one real factor
+
+    def test_noise_has_no_factors(self):
+        from market.services.experiments import _eig
+
+        rng = np.random.default_rng(2)
+        R = rng.normal(0, 0.01, (500, 20))
+        vals, _ = _eig(np.corrcoef(R, rowvar=False))
+        self.assertLess(vals[0], (1 + (20 / 500) ** 0.5) ** 2 * 1.1)
+
+    def test_chi2_tail(self):
+        from market.services.experiments import _chi2_sf
+
+        self.assertAlmostEqual(_chi2_sf(16.0, 16), 0.45, delta=0.03)
+        self.assertLess(_chi2_sf(60.0, 16), 1e-5)
+        self.assertGreater(_chi2_sf(2.0, 16), 0.99)
+
+
+class HumanNumberTests(SimpleTestCase):
+    def test_formats(self):
+        from market.downloads import human
+
+        self.assertEqual(human(177018000000.0), ("177,018,000,000", True))
+        self.assertEqual(human(87390123.456), ("87,390,123.46", True))
+        self.assertEqual(human(9461176), ("9,461,176", True))
+        self.assertEqual(human(34.4), ("34.40", True))
+        self.assertEqual(human(0.24213), ("0.2421", True))
+        self.assertEqual(human(-0.05), ("-0.05", True))
+        self.assertEqual(human(None), ("", False))
+        self.assertEqual(human(True), ("yes", False))
+        self.assertEqual(human("2026-11-20"), ("2026-11-20", False))
+        self.assertEqual(human("=cmd"), ("'=cmd", False))

@@ -1,0 +1,78 @@
+{% extends "market/base.html" %}{% load beezy %}
+{% block title %}Data & Glossary · Beezy Markets{% endblock %}
+{% block content %}
+<div class="kicker">Data</div>
+<h1 class="banner">Data & glossary</h1>
+<p class="standfirst">Download the data behind every page, or look up any term.</p>
+
+<div class="tabs scroll-tabs" role="tablist" data-local-tabs>
+  {% for d in datasets %}<a role="tab" class="tab{% if tab == d.key %} on{% endif %}" href="?tab={{ d.key }}" data-show="{{ d.key }}"{% if tab == d.key %} aria-selected="true"{% endif %}>{{ d.short }}</a>{% endfor %}
+  <a role="tab" class="tab{% if tab == 'glossary' %} on{% endif %}" href="?tab=glossary" data-show="glossary"{% if tab == 'glossary' %} aria-selected="true"{% endif %}>Glossary</a>
+</div>
+
+{% for d in datasets %}
+<section id="{{ d.key }}" class="card dl-panel" data-panel{% if tab != d.key %} hidden{% endif %}>
+  <div class="dl-head">
+    <h2 class="section-head">{{ d.title }}</h2>
+    <span class="label">{% if d.count is not None %}{{ d.count|num:0 }} rows{% else %}computed live{% endif %}</span>
+  </div>
+  <p class="note">{{ d.description }}</p>
+  <form id="dlf-{{ d.key }}" class="dl-form" method="get" action="/api/download/{{ d.key }}"
+        hx-get="/api/ui/data-preview/{{ d.key }}" hx-target="#prev-{{ d.key }}" hx-trigger="change">
+    {% if "ticker" in d.filters %}
+    <label class="field">{% if d.key == "markov" %}Series{% else %}Ticker{% endif %}
+      <select name="ticker">
+        {% if d.key == "markov" %}<option value="NASI">NASI · index</option>{% else %}<option value="">All</option>{% endif %}
+        {% for t, n in tickers %}<option value="{{ t }}">{{ t }} · {{ n|truncatechars:22 }}</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    {% if "label" in d.filters %}
+    <label class="field">Tone
+      <select name="label"><option value="">All</option><option value="positive">Positive</option><option value="negative">Negative</option><option value="neutral">Neutral</option></select>
+    </label>
+    {% endif %}
+    {% if "start" in d.filters %}
+    <label class="field">From <input type="date" name="start"></label>
+    <label class="field">To <input type="date" name="end"></label>
+    {% endif %}
+    <div class="dl-actions">
+      <button class="btn btn-accent" type="submit" name="format" value="csv">Download CSV</button>
+      <button class="btn" type="submit" name="format" value="json">JSON</button>
+    </div>
+  </form>
+  <div id="prev-{{ d.key }}" class="dl-preview" hx-get="/api/ui/data-preview/{{ d.key }}" hx-include="#dlf-{{ d.key }}" hx-trigger="intersect once">
+    <p class="loading">Loading preview…</p>
+  </div>
+</section>
+{% endfor %}
+
+<section id="glossary" class="dl-panel" data-panel{% if tab != "glossary" %} hidden{% endif %}>
+  <div class="card glossary-tools">
+    <div class="dl-head">
+      <h2 class="section-head">Glossary · {{ term_count }} terms</h2>
+      <div class="dl-actions">
+        <a class="btn btn-accent" href="/api/download/glossary?format=csv">Download CSV</a>
+        <a class="btn" href="/api/download/glossary?format=json">JSON</a>
+      </div>
+    </div>
+    <label class="field">Search terms
+      <input type="search" id="glossary-search" placeholder="e.g. P/E, drawdown, eigenvalue" autocomplete="off">
+    </label>
+    <nav class="glossary-index" aria-label="Glossary sections">
+      {% for cat, items in glossary %}<a href="#g-{{ forloop.counter }}">{{ cat }}</a>{% endfor %}
+    </nav>
+  </div>
+  <p class="empty" id="glossary-empty" hidden>No terms match.</p>
+  {% for cat, items in glossary %}
+  <section class="card glossary-group" id="g-{{ forloop.counter }}">
+    <h2 class="section-head">{{ cat }}</h2>
+    <dl class="glossary">
+      {% for term, definition in items %}<div data-term="{{ term|lower }} {{ definition|lower }}"><dt>{{ term }}</dt><dd>{{ definition }}</dd></div>{% endfor %}
+    </dl>
+  </section>
+  {% endfor %}
+</section>
+
+<p class="note">CSV opens directly in Excel or Google Sheets · up to 20 downloads a minute · personal research only (third-party data).</p>
+{% endblock %}

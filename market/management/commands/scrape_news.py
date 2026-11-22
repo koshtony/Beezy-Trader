@@ -4,7 +4,7 @@ from market.models import NewsArticle
 from market.services import ingest
 from market.services.sentiment import score_headline
 
-from ._base import TickerCommand
+from ._base import TickerCommand, job_lock
 
 
 class Command(TickerCommand):
@@ -15,8 +15,13 @@ class Command(TickerCommand):
         parser.add_argument(
             "--rescore", action="store_true", help="Only re-label stored headlines (after lexicon edits)"
         )
+        parser.add_argument("--quick", action="store_true", help="Combined queries over the days since the last run")
 
     def handle(self, *args, **opts):
+        with job_lock(self):
+            self._handle(opts)
+
+    def _handle(self, opts):
         if opts["rescore"]:
             changed = 0
             for a in NewsArticle.objects.all():
@@ -31,5 +36,5 @@ class Command(TickerCommand):
                     changed += 1
             self.stdout.write(self.style.SUCCESS(f"Re-scored {changed} headlines"))
             return
-        n = ingest.update_news(opts["tickers"] or None)
+        n = ingest.update_news(opts["tickers"] or None, full=False if opts["quick"] else True)
         self.stdout.write(self.style.SUCCESS(f"Added {n} new headlines"))

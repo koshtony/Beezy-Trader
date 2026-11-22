@@ -246,7 +246,7 @@ def backtest(close: np.ndarray, horizon: str, *, lookback: int | None = None, st
     step = step or {"1D": 2, "1W": 3, "1M": 7, "1Y": 21}[horizon]
     n = len(close)
     start = max(260, n - lookback - h)
-    hits = total = inside = 0
+    hits = moves = total = inside = 0
     err_model = err_naive = 0.0
     for t in range(start, n - h, step):
         hist = close[: t + 1]
@@ -260,16 +260,18 @@ def backtest(close: np.ndarray, horizon: str, *, lookback: int | None = None, st
         total += 1
         err_model += abs(actual - pred)
         err_naive += abs(actual)
-        if abs(actual) > 1e-9 and np.sign(actual) == np.sign(pred):
-            hits += 1
+        if abs(actual) > 1e-9:  # unchanged prices (common on thin NSE counters) can't be called either way
+            moves += 1
+            hits += int(np.sign(actual) == np.sign(pred))
         if abs(actual - pred) <= Z90 * sd:
             inside += 1
     if total < 10:
         return {}
-    moved = total  # share of forecasts that called direction correctly (flat outcomes count as misses)
     return {
         "samples": total,
-        "hit_rate": hits / moved,
+        "moves": moves,
+        "hit_rate": hits / moves if moves else None,  # direction right, among outcomes that moved
+        "flat_share": 1 - moves / total,
         "mae": err_model / total,
         "mae_naive": err_naive / total,
         "skill": 1 - (err_model / err_naive) if err_naive > 0 else 0.0,

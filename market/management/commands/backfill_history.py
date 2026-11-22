@@ -1,6 +1,6 @@
 from market.services import ingest
 
-from ._base import TickerCommand
+from ._base import TickerCommand, job_lock
 
 
 class Command(TickerCommand):
@@ -14,5 +14,6 @@ class Command(TickerCommand):
         parser.add_argument("--missing", action="store_true", help="Only stocks never backfilled")
 
     def handle(self, *args, **opts):
-        n = ingest.backfill_history(opts["tickers"] or None, only_missing=opts["missing"])
+        with job_lock(self):
+            n = ingest.backfill_history(opts["tickers"] or None, only_missing=opts["missing"])
         self.stdout.write(self.style.SUCCESS(f"Stored {n} historical closes"))

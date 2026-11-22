@@ -1,0 +1,19 @@
+{% load beezy %}<section>
+  <div class="tiles">
+    <div class="tile hero-tile"><div class="label">Market factor (PC1)</div><div class="value hero">{{ x.explained.0|pctu:1 }}</div><div class="sub">of daily moves explained</div></div>
+    <div class="tile"><div class="label">Independent bets</div><div class="value">{{ x.effective_bets|num:1 }}</div><div class="sub">out of {{ x.n_stocks }} counters</div></div>
+    <div class="tile"><div class="label">Components for 80%</div><div class="value">{{ x.k80 }}</div><div class="sub">of {{ x.n_stocks }}</div></div>
+    <div class="tile"><div class="label">Sample</div><div class="value">{{ x.n_days }} days</div><div class="sub">{{ x.start }} → {{ x.end }}</div></div>
+  </div>
+</section>
+<div class="two-col">
+  <section class="card"><h2 class="section-head">Variance explained</h2><div id="exp-variance" class="chart" role="img" aria-label="Variance explained by each principal component"></div></section>
+  <section class="card"><h2 class="section-head">Stock map · PC1 vs PC2</h2><div id="exp-map" class="chart" role="img" aria-label="Stocks plotted by their PC1 and PC2 loadings"></div></section>
+</div>
+<div class="two-col">
+  <section class="card"><h2 class="section-head">PC1 loadings · market factor</h2><div id="exp-pc1" class="chart short" role="img" aria-label="Loadings on the first principal component"></div>
+    <p class="note">Most exposed: {{ x.components.0.top|join:", " }}</p></section>
+  <section class="card"><h2 class="section-head">PC2 loadings · {{ x.components.1.explained|pctu:1 }}</h2><div id="exp-pc2" class="chart short" role="img" aria-label="Loadings on the second principal component"></div>
+    <p class="note">Splits {{ x.components.1.top|join:", " }} from {{ x.components.1.bottom|join:", " }}</p></section>
+</div>
+{{ x|json_script:"exp-data" }}
