@@ -26,6 +26,11 @@ if ON_RAILWAY:
 
 # The database and job locks live here; point it at a persistent volume in production.
 DATA_DIR = Path(os.environ.get("BEEZY_DATA_DIR", BASE_DIR))
+DB_PATH = Path(os.environ.get("BEEZY_DB_PATH", DATA_DIR / "db.sqlite3"))
+try:  # SQLite creates the file but not its folder (e.g. /data in a pre-deploy step, before a volume is mounted)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -76,7 +81,7 @@ WSGI_APPLICATION = "beezy.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.environ.get("BEEZY_DB_PATH", DATA_DIR / "db.sqlite3"),
+        "NAME": DB_PATH,
         "OPTIONS": {
             # WAL lets the web server read while a scrape/analysis job writes.
             "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",

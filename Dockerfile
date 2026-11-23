@@ -17,7 +17,8 @@ COPY . .
 
 # Hashed, pre-compressed static files (WhiteNoise). The key is only used for this build step.
 RUN DJANGO_DEBUG=0 DJANGO_SECRET_KEY=collectstatic-only python manage.py collectstatic --noinput -v 0 \
-    && chmod +x docker/start.sh
+    && chmod +x docker/start.sh \
+    && mkdir -p /data
 
 ENV DJANGO_DEBUG=0 \
     BEEZY_DATA_DIR=/data \

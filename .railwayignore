@@ -9,3 +9,5 @@ backups/
 logs/
 staticfiles/
 .env
+.env.*
+!.env.example
