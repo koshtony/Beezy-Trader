@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from .models import JobLog, NewsArticle, PriceBar, Projection, RecommendationRun, Stock, StockAnalytics
 from .security import safe_url
-from .services import accuracy, catalog, experiments, pipeline, portfolio
+from .services import accuracy, catalog, experiments, factors, pipeline, portfolio
 
 HORIZON_ORDER = {"1D": 0, "1W": 1, "1M": 2, "1Y": 3}
 
@@ -378,6 +378,20 @@ def experiment(kind: str, ticker: str = "") -> dict:
             hit["choices"] = choices
         cache.set(key, hit, 3600)
     return hit
+
+
+@cached("factors", 600)
+def factors_overview() -> dict:
+    """Macro environment, exposures, measured sensitivity and company events (macro data refreshes daily)."""
+    return factors.overview()
+
+
+@cached("stockfactors", 600)
+def stock_factors(ticker: str) -> dict | None:
+    st = Stock.objects.filter(ticker=ticker.upper()).first()
+    if st is None:
+        return None
+    return factors.for_stock(st.ticker, st.sector, factors_overview()["sensitivity"]["rows"])
 
 
 def job_status() -> dict:

@@ -150,17 +150,19 @@ def experiment(request: HttpRequest, kind: Literal["pca", "eigen", "markov", "ac
 )
 def download(
     request: HttpRequest,
-    dataset: Literal["stocks", "prices", "fundamentals", "projections", "accuracy", "news", "picks", "pca", "eigenvalues", "markov", "glossary"],
+    dataset: Literal["stocks", "prices", "fundamentals", "projections", "accuracy", "macro", "news", "picks", "pca", "eigenvalues", "markov", "glossary"],
     format: Literal["csv", "json"] = "csv",
     ticker: str = "",
     start: str = "",
     end: str = "",
     label: str = "",
+    series: str = "",
 ):
     import datetime as dt
     import re
 
     from .downloads import DATASETS, Params, respond
+    from .services.macro import SERIES
     from .services.experiments import ExperimentError as ExpErr
 
     t = ticker.strip().upper()
@@ -171,8 +173,10 @@ def download(
         e = dt.date.fromisoformat(end) if end else None
     except ValueError:
         raise HttpError(400, "Dates must be YYYY-MM-DD")
+    if series and series not in SERIES:
+        raise HttpError(400, "Unknown series")
     try:
-        return respond(DATASETS[dataset], Params(ticker=t, start=s, end=e, label=label), format)
+        return respond(DATASETS[dataset], Params(ticker=t, start=s, end=e, label=label, series=series), format)
     except ExpErr as exc:
         raise HttpError(400, str(exc))
 
@@ -182,6 +186,19 @@ def glossary(request: HttpRequest):
     from .glossary import flat
 
     return flat()
+
+
+@router.get("/factors", summary="Macro environment (CBK rates, inflation, shilling, oil), who it helps or hurts, measured sensitivity and company events")
+def factors_overview(request: HttpRequest):
+    return queries.factors_overview()
+
+
+@router.get("/stocks/{ticker}/factors", summary="Macro tailwinds/headwinds and recent company events for one stock")
+def stock_factors(request: HttpRequest, ticker: str):
+    data = queries.stock_factors(ticker[:16])
+    if data is None:
+        raise HttpError(404, "Unknown ticker")
+    return data
 
 
 @router.get("/jobs", summary="Recent scrape / analysis jobs")

@@ -401,3 +401,47 @@ ol.wire { list-style: none; padding: 0; margin: 0; columns: 2 420px; column-gap:
 
 /* row labels such as "1 month" stay on one line */
 .ledger th[scope="row"] { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- macro & company factors */
+.macro-tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.macro-tiles .sub .ink { color: var(--ink); font-weight: 800; }
+.badge.move { color: var(--ink); border-color: var(--ink-2); }
+ul.why.mixed li::before { content: "~"; color: var(--muted); }
+.macro-tiles .value { font-size: 22px; }
+.factor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .factor-grid { grid-template-columns: 1fr; } }
+.factor-card h4.mini-head { margin-top: 12px; }
+.factor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.factor-head h3 { margin: 0; font-size: 15px; }
+.badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--line-strong); color: var(--ink-2); white-space: nowrap; }
+.badge.up, .badge.rising { color: var(--up); border-color: var(--up); }
+.badge.down, .badge.falling { color: var(--down); border-color: var(--down); }
+.badge.flat { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.chip { font: inherit; font-size: 12px; font-weight: 700; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: transparent; color: var(--ink-2); }
+.chip.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.chip.on .muted { color: inherit; opacity: .7; }
+.nowrap { white-space: nowrap; }
+.sens-cell { color: var(--muted); }
+.sens-cell.sig { font-weight: 800; }
+.sens-cell.sig.up { color: var(--up); }
+.sens-cell.sig.down { color: var(--down); }
+.drivers { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 22px; }
+.drivers .note-list li { margin: 3px 0; }
+.factor-list, .event-list { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.factor-list li, .event-list li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.factor-list li:last-child, .event-list li:last-child { border-bottom: 0; }
+.factor-list .badge { margin-right: 6px; }
+.event-list .dot { margin-right: 4px; }
+.events-table td { vertical-align: top; }
+/* eight menu items: drop text labels earlier on mid-size screens */
+@media (min-width: 641px) and (max-width: 1100px) {
+  .app-nav-item { padding: 9px 10px; gap: 6px; font-size: 12px; }
+}
+@media (min-width: 641px) and (max-width: 860px) {
+  .app-nav-item .lbl { display: none; }
+  .app-nav-item { padding: 10px 14px; }
+}
+.dot.down { background: var(--down); }

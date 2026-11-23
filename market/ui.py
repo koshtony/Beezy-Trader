@@ -68,8 +68,17 @@ def experiment(request: HttpRequest, kind: str, ticker: str = "NASI"):
         return _html("exp_error.html", {"error": str(exc)}, request)
 
 
+@router.get("/factors/{ticker}", response=None, include_in_schema=False)
+def stock_factors(request: HttpRequest, ticker: str):
+    data = queries.stock_factors(ticker[:16])
+    if data is None:
+        return _html("exp_error.html", {"error": "Unknown ticker."}, request)
+    return _html("stock_factors.html", {"f": data, "ticker": ticker.upper()[:16]}, request)
+
+
 @router.get("/data-preview/{dataset}", response=None, include_in_schema=False)
-def data_preview(request: HttpRequest, dataset: str, ticker: str = "", start: str = "", end: str = "", label: str = ""):
+def data_preview(request: HttpRequest, dataset: str, ticker: str = "", start: str = "", end: str = "", label: str = "",
+                 series: str = ""):
     import datetime as dt
     from itertools import islice
 
@@ -85,6 +94,7 @@ def data_preview(request: HttpRequest, dataset: str, ticker: str = "", start: st
             start=dt.date.fromisoformat(start) if start else None,
             end=dt.date.fromisoformat(end) if end else None,
             label=label,
+            series=series if series.isidentifier() else "",
         )
         rows = list(islice(ds.rows(params), 8))
     except (ValueError, ExpErr) as exc:

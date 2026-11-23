@@ -21,7 +21,7 @@ from ..models import (
     Stock,
     StockAnalytics,
 )
-from . import catalog, ingest, locks, metrics, projections, scoring
+from . import catalog, ingest, locks, macro, metrics, projections, scoring
 
 log = logging.getLogger("market.pipeline")
 
@@ -333,6 +333,13 @@ def _daily_refresh(news: bool, force_fundamentals: bool, full_news: bool | None)
     if force_fundamentals or not Fundamentals.objects.filter(fetched_at__gte=stale).exists():
         parts.append(f"fundamentals {ingest.update_fundamentals()}")
         changed = True
+    if not JobLog.objects.filter(job="macro", status=JobLog.OK,
+                                 started_at__gte=timezone.now() - dt.timedelta(hours=20)).exists():
+        try:  # CBK and EIA publish daily at most; never let a macro outage stop the price refresh
+            parts.append("macro " + ("updated" if macro.update() else "unchanged"))
+        except Exception as exc:
+            log.warning("macro update failed: %s", exc)
+            parts.append("macro failed")
     if news:
         added = ingest.update_news(full=full_news)
         parts.append(f"{added} headlines")
@@ -389,6 +396,7 @@ def bootstrap(history: bool = True) -> str:
         try:
             ingest.update_fundamentals()
             ingest.update_news(full=True)
+            macro.update()
         except Exception:
             log.exception("bootstrap side jobs failed")
         finally:

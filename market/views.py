@@ -89,14 +89,21 @@ def experiments_page(request):
 
 
 @require_GET
+def factors_page(request):
+    return render(request, "market/factors.html", {
+        "summary": queries.market_summary(), "x": queries.factors_overview(), "nav": "factors",
+    })
+
+
+@require_GET
 def data_page(request):
     from .downloads import DATASETS
     from .glossary import GLOSSARY
     from .models import Stock
 
     short = {"stocks": "Stocks", "prices": "Prices", "fundamentals": "Fundamentals", "projections": "Projections",
-             "news": "News", "picks": "Picks", "accuracy": "Accuracy", "pca": "PCA", "eigenvalues": "Eigenvalues",
-             "markov": "Markov"}
+             "news": "News", "picks": "Picks", "accuracy": "Accuracy", "macro": "Macro", "pca": "PCA",
+             "eigenvalues": "Eigenvalues", "markov": "Markov"}
     datasets = [{"key": d.key, "short": short.get(d.key, d.title), "title": d.title, "description": d.description,
                  "filters": d.filters, "count": d.count()}
                 for d in DATASETS.values() if d.key != "glossary"]
@@ -104,8 +111,11 @@ def data_page(request):
     tab = request.GET.get("tab", "stocks")
     if tab not in {d["key"] for d in datasets} | {"glossary"}:
         tab = "stocks"
+    from .services.macro import SERIES
+
     return render(request, "market/data.html", {
         "summary": queries.market_summary(), "datasets": datasets, "tickers": tickers,
+        "macro_series": [(k, name) for k, (name, _, _) in SERIES.items()],
         "glossary": GLOSSARY, "term_count": sum(len(items) for _, items in GLOSSARY), "nav": "data", "tab": tab,
     })
 

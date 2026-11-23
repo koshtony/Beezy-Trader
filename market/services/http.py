@@ -53,6 +53,8 @@ def host_delay(host: str) -> float:
         return float(_cfg("STOCKANALYSIS_DELAY"))
     if "news.google" in host:
         return float(_cfg("NEWS_DELAY"))
+    if "centralbank.go.ke" in host or "eia.gov" in host:
+        return float(_cfg("MACRO_DELAY"))
     return 1.0
 
 

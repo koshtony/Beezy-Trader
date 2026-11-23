@@ -27,6 +27,11 @@
       </select>
     </label>
     {% endif %}
+    {% if "series" in d.filters %}
+    <label class="field">Series
+      <select name="series"><option value="">All</option>{% for k, n in macro_series %}<option value="{{ k }}">{{ n }}</option>{% endfor %}</select>
+    </label>
+    {% endif %}
     {% if "label" in d.filters %}
     <label class="field">Tone
       <select name="label"><option value="">All</option><option value="positive">Positive</option><option value="negative">Negative</option><option value="neutral">Neutral</option></select>

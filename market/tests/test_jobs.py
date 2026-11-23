@@ -221,15 +221,17 @@ class AnalysisJobTests(TestCase):
         pipeline.run_analysis()
         self.assertEqual(Projection.objects.count(), before)
 
+    @mock.patch("market.services.macro.update", return_value="macro ok")
     @mock.patch.object(ingest, "update_fundamentals")
     @mock.patch.object(ingest, "update_news", return_value=0)
     @mock.patch.object(ingest, "update_daily_prices", return_value=0)
-    def test_refresh_skips_analysis_when_nothing_changed(self, prices, news_, funds):
+    def test_refresh_skips_analysis_when_nothing_changed(self, prices, news_, funds, macro_update):
         runs = RecommendationRun.objects.count()
         summary = pipeline.daily_refresh()
         self.assertIn("analysis skipped", summary)
         self.assertEqual(RecommendationRun.objects.count(), runs)
         funds.assert_not_called()  # fundamentals are fresh
+        macro_update.assert_called_once()  # macro data refreshes once a day
         row = JobLog.objects.filter(job="refresh").first()
         self.assertEqual((row.status, row.message), (JobLog.OK, summary))
         self.assertTrue(JobLog.objects.filter(job="prune").exists())

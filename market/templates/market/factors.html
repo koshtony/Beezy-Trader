@@ -1,0 +1,118 @@
+{% extends "market/base.html" %}{% load static beezy %}
+{% block title %}Macro & company factors · Beezy Markets{% endblock %}
+{% block head %}<script src="{% static 'market/vendor/plotly-basic.min.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="kicker">Factors</div>
+<h1 class="banner">Macro &amp; company factors</h1>
+<p class="standfirst">What is moving in Kenya's economy and in company news, and which NSE shares it helps or hurts.</p>
+
+{% if not x.tiles %}
+<p class="empty">No macro data yet. It loads with the next scheduled refresh{% if can_refresh %}, or run <code>python manage.py refresh</code>{% endif %}.</p>
+{% else %}
+<div class="tiles macro-tiles">
+  {% for t in x.tiles %}
+  <div class="tile{% if forloop.first %} hero-tile{% endif %}">
+    <div class="label">{{ t.name }}</div>
+    <div class="value">{% if t.key == "brent" %}${{ t.value|num }}{% elif t.unit == "%" %}{{ t.value|num }}%{% else %}{{ t.value|num }}{% endif %}</div>
+    <div class="sub">
+      {% if t.sub %}{{ t.sub }}{% else %}{% if t.change is not None %}<b class="ink">{% if t.change > 0 %}▲{% elif t.change < 0 %}▼{% endif %} {% if t.relative %}{{ t.change|pct:1 }}{% else %}{{ t.change|signed:2 }} pp{% endif %}</b> in {{ t.months }} months · {% endif %}{{ t.date|date:"j M Y" }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<section>
+  <h2 class="section-head">What today's environment means</h2>
+  <div class="factor-grid">
+    {% for e in x.environment %}{% if e.available %}
+    <article class="card factor-card">
+      <div class="factor-head">
+        <h3>{{ e.name }}</h3>
+        <span class="badge move" title="{{ e.label }}">{% if e.direction == 'rising' %}▲ Rising{% elif e.direction == 'falling' %}▼ Falling{% else %}Steady{% endif %}</span>
+      </div>
+      <p class="note">{{ e.measure|capfirst }}: {% if e.relative %}{{ e.then|num }} → {{ e.value|num }} ({{ e.change|pct:1 }}){% else %}{{ e.then|num }}% → {{ e.value|num }}% ({{ e.change|signed:2 }} pp){% endif %}{% if e.band %}, {{ e.band }}{% endif %}.</p>
+      {% if e.helps %}<h4 class="mini-head">Helps</h4>
+      <ul class="why">{% for h in e.helps %}<li><b>{{ h.who }}</b>: {{ h.why }}</li>{% endfor %}</ul>{% endif %}
+      {% if e.hurts %}<h4 class="mini-head">Hurts</h4>
+      <ul class="watch">{% for h in e.hurts %}<li><b>{{ h.who }}</b>: {{ h.why }}</li>{% endfor %}</ul>{% endif %}
+      {% if e.mixed %}<h4 class="mini-head">Mixed</h4>
+      <ul class="why mixed">{% for h in e.mixed %}<li><b>{{ h.who }}</b>: {{ h.why }}</li>{% endfor %}</ul>{% endif %}
+      {% if e.watch %}<p class="note">No strong push either way. A move would matter most for: {% for h in e.watch %}<b>{{ h.who }}</b>{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+      {% if e.market_note %}<p class="note">Market-wide: {{ e.market_note }}</p>{% endif %}
+    </article>
+    {% endif %}{% endfor %}
+  </div>
+</section>
+
+<section class="card">
+  <h2 class="section-head">Rates &amp; inflation · 5 years</h2>
+  <div id="fc-rates" class="chart" role="img" aria-label="Central Bank Rate, 91-day T-bill, bank lending rate and inflation over five years"></div>
+</section>
+<div class="two-col">
+  <section class="card"><h2 class="section-head">Shilling · USD/KES</h2><div id="fc-fx" class="chart short" role="img" aria-label="US dollar to Kenyan shilling exchange rate over five years"></div></section>
+  <section class="card"><h2 class="section-head">Brent crude · USD per barrel</h2><div id="fc-oil" class="chart short" role="img" aria-label="Brent crude oil price over five years"></div></section>
+</div>
+
+{% with s=x.sensitivity %}
+<section class="card">
+  <h2 class="section-head">Did it show up in share prices? · measured over {{ s.months }} months{% if s.start %} ({{ s.start }} to {{ s.end }}){% endif %}</h2>
+  {% if s.rows %}
+  <div class="scroll-x">
+  <table class="ledger sortable sens">
+    <thead><tr>
+      <th data-sort="text">Counter</th><th data-sort="text">Sector</th>
+      <th class="n" data-sort="num" title="Share move for a 1% market move">Market beta</th>
+      <th class="n" data-sort="num" title="Share move when the 91-day T-bill rises 1 percentage point">Rates +1 pp</th>
+      <th class="n" data-sort="num" title="Share move when the dollar gains 5% against the shilling">Shilling −5%</th>
+      <th class="n" data-sort="num" title="Share move when Brent rises 20%">Oil +20%</th>
+    </tr></thead>
+    <tbody>{% for r in s.rows %}
+      <tr><td><a href="/stocks/{{ r.ticker }}/">{{ r.ticker }}</a></td><td class="muted small">{{ r.sector }}</td>
+        <td class="n" data-v="{{ r.market }}">{{ r.market|num }}</td>
+        <td class="n sens-cell{% if r.rates_t >= 2 or r.rates_t <= -2 %} sig {{ r.rates|tone }}{% endif %}" data-v="{{ r.rates }}" title="t = {{ r.rates_t|num:1 }}">{{ r.rates|spctv:1 }}{% if r.rates_check == "confirmed" %} ✓{% elif r.rates_check == "contradicted" %} ✗{% endif %}</td>
+        <td class="n sens-cell{% if r.shilling_t >= 2 or r.shilling_t <= -2 %} sig {{ r.shilling|tone }}{% endif %}" data-v="{{ r.shilling }}" title="t = {{ r.shilling_t|num:1 }}">{{ r.shilling|spctv:1 }}{% if r.shilling_check == "confirmed" %} ✓{% elif r.shilling_check == "contradicted" %} ✗{% endif %}</td>
+        <td class="n sens-cell{% if r.oil_t >= 2 or r.oil_t <= -2 %} sig {{ r.oil|tone }}{% endif %}" data-v="{{ r.oil }}" title="t = {{ r.oil_t|num:1 }}">{{ r.oil|spctv:1 }}{% if r.oil_check == "confirmed" %} ✓{% elif r.oil_check == "contradicted" %} ✗{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  <p class="note">Monthly share returns regressed on the market (NASI), T-bill changes, USD/KES and Brent together. Bold and coloured = statistically clear (|t| ≥ 2); grey = could be noise. ✓ matches the rule above, ✗ goes against it. Thinly traded counters are left out.</p>
+  {% else %}<p class="empty">Not enough monthly history yet.</p>{% endif %}
+</section>
+{% endwith %}
+{% endif %}
+
+<section class="card" id="events">
+  <h2 class="section-head">Company events · last 30 days</h2>
+  {% if x.events %}
+  <div class="chips" role="group" aria-label="Filter by event type">
+    <button type="button" class="chip on" data-filter="">All <span class="muted">{{ x.events|length }}</span></button>
+    {% for c in x.event_counts %}<button type="button" class="chip" data-filter="{{ c.key }}">{{ c.label }} <span class="muted">{{ c.n }}</span></button>{% endfor %}
+  </div>
+  <div class="scroll-x">
+  <table class="ledger events-table">
+    <thead><tr><th>Date</th><th>Counter</th><th>Type</th><th>Headline</th></tr></thead>
+    <tbody>{% for e in x.events %}
+      <tr data-tags="{{ e.tags|join:' ' }}">
+        <td class="small nowrap">{{ e.published_at|date:"j M" }}</td>
+        <td><a href="/stocks/{{ e.ticker }}/">{{ e.ticker }}</a></td>
+        <td class="small">{{ e.tag_labels|join:", " }}</td>
+        <td><span class="dot {% if e.label == 'positive' %}up{% elif e.label == 'negative' %}down{% else %}flat{% endif %}" title="{{ e.label }}"></span>
+          {% if e.url %}<a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}
+          <span class="muted small">{{ e.source }}{% if e.similar %} · +{{ e.similar }} similar{% endif %}</span></td>
+      </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="empty">No tagged company news in the last 30 days.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2 class="section-head">What else to watch, by sector</h2>
+  <div class="drivers">
+    {% for sector, items in x.drivers.items %}<div><h3 class="mini-head">{{ sector }}</h3><ul class="note-list">{% for i in items %}<li>{{ i }}</li>{% endfor %}</ul></div>{% endfor %}
+  </div>
+  <p class="note">Sources: Central Bank of Kenya (rates, inflation, exchange rates), US Energy Information Administration (Brent), company headlines via Google News. Updated daily. These factors are shown for context; they don't change the scores.</p>
+</section>
+{{ x.charts|json_script:"factor-data" }}
+{% endblock %}
+
+{% block scripts %}<script>document.addEventListener("DOMContentLoaded", () => window.Beezy && Beezy.factorCharts());</script>{% endblock %}

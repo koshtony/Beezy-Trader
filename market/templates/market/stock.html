@@ -134,6 +134,11 @@
 </section>
 
 <section class="card">
+  <h2 class="section-head">Macro &amp; company factors</h2>
+  <div id="stock-factors" hx-get="/api/ui/factors/{{ d.ticker }}" hx-trigger="revealed"><p class="loading">Loading…</p></div>
+</section>
+
+<section class="card">
   <h2 class="section-head">{{ d.ticker }} in the news</h2>
   <div id="stock-news" hx-get="/api/ui/news?ticker={{ d.ticker }}&limit=20" hx-trigger="revealed"><p class="loading">Loading…</p></div>
 </section>

@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from . import queries
 from .glossary import flat as glossary_rows
-from .models import Fundamentals, NewsArticle, PriceBar, Projection, Stock, StockAnalytics
+from .models import Fundamentals, MacroPoint, NewsArticle, PriceBar, Projection, Stock, StockAnalytics
 
 # Cells starting with these characters can run as formulas in Excel/Sheets (CSV injection).
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
@@ -24,6 +24,7 @@ class Params:
     start: dt.date | None = None
     end: dt.date | None = None
     label: str = ""
+    series: str = ""
 
 
 @dataclass
@@ -119,6 +120,21 @@ ACCURACY_COLUMNS = [
 ]
 
 
+def _macro(p: Params):
+    from .services.macro import SERIES
+
+    qs = MacroPoint.objects.order_by("series", "date")
+    if p.series:
+        qs = qs.filter(series=p.series)
+    if p.start:
+        qs = qs.filter(date__gte=p.start)
+    if p.end:
+        qs = qs.filter(date__lte=p.end)
+    for s, d, v, src in qs.values_list("series", "date", "value", "source").iterator(chunk_size=5000):
+        name, unit, _ = SERIES.get(s, (s, "", ""))
+        yield {"series": s, "name": name, "unit": unit, "date": d.isoformat(), "value": v, "source": src}
+
+
 def _news(p: Params):
     qs = NewsArticle.objects.select_related("stock").order_by("-published_at")
     if p.ticker:
@@ -195,6 +211,9 @@ DATASETS: dict[str, Dataset] = {d.key: d for d in [
     Dataset("accuracy", "Forecast accuracy", "Every published forecast that has reached its target date, with the actual price, "
             "error, direction and whether it landed inside the 90% range.", _accuracy, ["ticker"],
             columns=ACCURACY_COLUMNS),
+    Dataset("macro", "Macro data", "Central Bank Rate, T-bill and interbank rates, inflation, bank lending and deposit "
+            "rates, USD/KES (CBK) and Brent crude (EIA), with full history.", _macro, ["series", "start", "end"],
+            count=lambda: MacroPoint.objects.count(), columns=["series", "name", "unit", "date", "value", "source"]),
     Dataset("news", "News & sentiment", "Headlines with source, date, link and positive / negative / neutral label.",
             _news, ["ticker", "label", "start", "end"], count=lambda: NewsArticle.objects.count()),
     Dataset("picks", "Picks", "Top 5, high risk / high gain and low risk / steady lists with reasons and warnings.", _picks),

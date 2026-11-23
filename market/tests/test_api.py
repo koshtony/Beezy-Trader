@@ -321,7 +321,7 @@ class DownloadTests(PipelineApiTests):
         for key in DATASETS:
             with self.subTest(dataset=key):
                 rows = self._csv(f"/api/download/{key}?ticker=GOOD" if key == "markov" else f"/api/download/{key}")
-                self.assertTrue(rows or key == "accuracy", key)  # no forecast has matured in this fixture
+                self.assertTrue(rows or key in ("accuracy", "macro"), key)  # nothing matured / no macro data here
         js = self.client.get("/api/download/stocks?format=json")
         self.assertEqual(len(js.json()), len(SPECS))
         self.assertIn(".json", js["Content-Disposition"])

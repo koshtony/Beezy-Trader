@@ -444,6 +444,56 @@
     });
   }
 
+  // ------------------------------------------------------------ macro & company factors
+  function factorCharts() {
+    const src = document.getElementById("factor-data");
+    if (!src || !window.Plotly) return;
+    const x = JSON.parse(src.textContent);
+    const el = (id) => document.getElementById(id);
+    const line = (s, name, color, extra) => Object.assign({
+      type: "scatter", mode: "lines", name, x: s.dates, y: s.values, line: { color, width: 2 },
+      hovertemplate: "%{x|%d %b %Y}<br>%{y:.2f}<extra>" + name + "</extra>",
+    }, extra || {});
+
+    if (el("fc-rates") && x.tbill91) draw(el("fc-rates"), (C) => {
+      const dates = x.tbill91.dates;
+      const L = baseLayout(C, { hovermode: "x unified" });
+      L.xaxis.type = "date";
+      Object.assign(L.yaxis, { ticksuffix: "%" });
+      L.shapes = [{ type: "rect", xref: "paper", x0: 0, x1: 1, y0: 2.5, y1: 7.5, fillcolor: C.s3, opacity: 0.08, line: { width: 0 }, layer: "below" }];
+      L.annotations = [{ xref: "paper", x: 0.005, y: 7.5, yanchor: "bottom", xanchor: "left", text: "CBK inflation target 2.5–7.5%", showarrow: false, font: { size: 10, color: C.muted } }];
+      const traces = [];
+      if (x.cbr) traces.push(line(x.cbr, "Central Bank Rate", C.ink2, { line: { color: C.ink2, width: 2.5, shape: "hv" } }));
+      traces.push(line(x.tbill91, "91-day T-bill", C.s1));
+      if (x.inflation) traces.push(line(x.inflation, "Inflation", C.s2));
+      if (x.lending) traces.push(line(x.lending, "Bank lending rate", C.s3, { line: { color: C.s3, width: 2, dash: "dot" } }));
+      if (x.cbr && x.cbr.dates.length) {  // carry the policy rate to today
+        const last = x.cbr.values[x.cbr.values.length - 1], end = dates[dates.length - 1];
+        traces[0].x = x.cbr.dates.concat([end]); traces[0].y = x.cbr.values.concat([last]);
+      }
+      Plotly.react(el("fc-rates"), traces, L, CONFIG);
+    });
+    const single = (id, s, name, prefix) => {
+      if (el(id) && s && s.dates.length) draw(el(id), (C) => {
+        const L = baseLayout(C, { hovermode: "x", showlegend: false });
+        L.xaxis.type = "date";
+        if (prefix) L.yaxis.tickprefix = prefix;
+        Plotly.react(el(id), [line(s, name, C.s1, { fill: "tozeroy", fillcolor: C.s1Fill })], L, CONFIG);
+        Plotly.relayout(el(id), { "yaxis.range": [Math.min(...s.values) * 0.95, Math.max(...s.values) * 1.03] });
+      });
+    };
+    single("fc-fx", x.usdkes, "USD/KES");
+    single("fc-oil", x.brent, "Brent", "$");
+  }
+  document.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chips .chip[data-filter]");
+    if (!chip) return;
+    const box = chip.closest("section");
+    box.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === chip));
+    const f = chip.dataset.filter;
+    box.querySelectorAll("tr[data-tags]").forEach((tr) => { tr.hidden = !!f && !tr.dataset.tags.split(" ").includes(f); });
+  });
+
   // ------------------------------------------------------------ disclaimer (first visit)
   const COOKIE = "bz_disclaimer";
   function openDisclaimer() {
@@ -568,5 +618,5 @@
     if (empty) empty.hidden = shown > 0;
   });
 
-  window.Beezy = { scatter, stockCharts, calcChart, expCharts, setTheme, openDisclaimer, kes };
+  window.Beezy = { scatter, stockCharts, calcChart, expCharts, factorCharts, setTheme, openDisclaimer, kes };
 })();

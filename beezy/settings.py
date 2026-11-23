@@ -5,6 +5,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
 from django.core.exceptions import ImproperlyConfigured
 
 DEV_SECRET = "dev-insecure-beezy-trader-key-change-me-in-production"
@@ -161,6 +162,8 @@ BEEZY = {
     "STOCKANALYSIS_BASE": "https://stockanalysis.com",
     "STOCKANALYSIS_DELAY": float(os.environ.get("BEEZY_SA_DELAY", "2.5")),
     "NEWS_DELAY": float(os.environ.get("BEEZY_NEWS_DELAY", "1.5")),
+    # Central Bank of Kenya and EIA pages (about nine requests a day).
+    "MACRO_DELAY": float(os.environ.get("BEEZY_MACRO_DELAY", "3")),
     "NEWS_LOOKBACK_DAYS": 60,
     "USER_AGENT": "BeezyMarkets/1.0 (personal NSE research tool; low-frequency)",
     "HTTP_TIMEOUT": 30,

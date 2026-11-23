@@ -18,10 +18,28 @@
   shares after NSE trading costs, and runs 4,000 simulated futures (dividends included, after
   withholding tax). It shows the likely value, the bad and good cases, the chance of profit, and
   milestones along the way.
-* has an **Experiments** page with three tabs:
+* has a **Macro** page that tracks the factors behind share prices:
+  * **macro data** from the Central Bank of Kenya, updated daily: the policy rate (CBR) and its
+    decisions, the 91-day T-bill, KESONIA, inflation, bank lending and deposit rates and USD/KES.
+    Brent crude comes from the US EIA. History goes back to 1991 for some series.
+  * **today's environment**: whether rates, inflation, the shilling and oil are rising, falling or
+    steady, and which sectors and stocks that helps or hurts, with the reason. For example, rate cuts
+    squeeze bank margins as loans reprice, and a weaker shilling helps tea exporters.
+  * **a measured check**: each stock's monthly returns over 5 years are regressed on the market,
+    T-bill changes, USD/KES and Brent, to show whether each effect really shows up in its share price
+  * **company events** (micro factors): headlines tagged as results, dividends, profit warnings,
+    capital raises, leadership changes, regulation and tax, deals, legal action or credit ratings,
+    plus the sector-specific drivers to watch
+
+  Each stock page has a **Macro & company factors** card with its current tailwinds and headwinds,
+  how far past data supports them, and its recent events. These factors are shown for context;
+  they don't change the scores.
+* has an **Experiments** page with five tabs:
   * **PCA**: the market factor, independent bets, a stock map and loadings
   * **Eigenvalues**: the eigenvalue spectrum against the Marchenko–Pastur noise bound, plus the absorption ratio over time
   * **Markov chain**: the 5-state transition matrix, the long-run distribution, a χ² memory test, memory half-life and simulated paths
+  * **Accuracy**: published forecasts checked against actual closing prices, plus the backtest track record
+  * **Notes**: a plain-language reading of all of the above
 * has a **Data** page for downloading every dataset as CSV (Excel-ready) or JSON, with ticker, date and tone filters, plus a searchable **glossary** of about 120 terms
 * shows a **disclaimer on first visit**, which must be acknowledged once and is remembered for a year
 
@@ -77,6 +95,8 @@ NSE trading hours are 09:30–15:00, so the three runs fetch the previous close,
 What a routine run costs:
 
 * **Prices**: one request.
+* **Macro data**: about nine requests, once a day (Central Bank of Kenya and EIA). If a source fails,
+  the others still update and the price refresh carries on.
 * **News**: about 20 requests and 30 s. Busy names get their own query; quiet ones share combined
   `"A" OR "B" …` queries that cover only the days since the last run. Once a week a full sweep
   queries every stock over 60 days. If Google answers 429, the run waits and slows down instead of
@@ -117,7 +137,8 @@ Interactive docs are at **`/api/docs`**. JSON endpoints:
 | `GET /api/recommendations` · `GET /api/recommendations/scatter` | Top 5 and the risk-profile picks |
 | `GET /api/calculator?amount=&profile=low\|steady\|high&horizon=&unit=days\|weeks\|months\|years&costs=` | Portfolio simulation, milestones and a comparison of the three styles |
 | `GET /api/experiments/pca\|eigen\|markov\|accuracy\|notes?ticker=` | PCA, eigenvalue spectrum and absorption ratio, Markov chain, forecast accuracy, plain-language notes |
-| `GET /api/download/{dataset}?format=csv\|json&ticker=&start=&end=&label=` | Downloads: stocks, prices, fundamentals, projections, accuracy, news, picks, pca, eigenvalues, markov, glossary |
+| `GET /api/factors` · `GET /api/stocks/{ticker}/factors` | Macro environment, who it helps or hurts, measured sensitivity, company events |
+| `GET /api/download/{dataset}?format=csv\|json&ticker=&start=&end=&label=&series=` | Downloads: stocks, prices, fundamentals, projections, accuracy, macro, news, picks, pca, eigenvalues, markov, glossary |
 | `GET /api/glossary` | Every term with its definition |
 | `GET /api/jobs` · `POST /api/jobs/refresh?kind=prices\|news\|analysis\|daily` | Job status and triggers |
 

@@ -195,3 +195,19 @@ class JobLog(models.Model):
 
     def __str__(self):
         return f"{self.job} {self.status} @ {self.started_at:%Y-%m-%d %H:%M}"
+
+
+class MacroPoint(models.Model):
+    """One observation of a macro series (CBK rates, inflation, USD/KES, Brent...)."""
+
+    series = models.CharField(max_length=20, db_index=True)
+    date = models.DateField()
+    value = models.FloatField()
+    source = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ["series", "date"]
+        constraints = [models.UniqueConstraint(fields=["series", "date"], name="uniq_macro_point")]
+
+    def __str__(self):
+        return f"{self.series} {self.date} {self.value}"

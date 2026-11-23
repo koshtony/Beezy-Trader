@@ -1,0 +1,28 @@
+{% load beezy %}<div class="two-col stock-factors">
+  <div>
+    <h3 class="mini-head">Macro right now</h3>
+    {% if f.exposures %}
+    <ul class="factor-list">{% for e in f.exposures %}
+      <li class="fx-{{ e.status }}">
+        <span class="badge {% if e.status == 'tailwind' %}up{% elif e.status == 'headwind' %}down{% else %}flat{% endif %}">{% if e.status == 'watch' %}Steady{% else %}{{ e.status|capfirst }}{% endif %}</span>
+        <b>{% if e.status == 'watch' %}{{ e.name }}{% else %}{{ e.label }}{% endif %}</b> · {{ e.why }}
+        {% if e.measured is not None %}<div class="muted small">Measured: {{ e.measured|spctv:1 }} {% if e.factor == "rates" %}per +1 pp T-bill{% elif e.factor == "shilling" %}when the dollar gains 5%{% else %}when oil rises 20%{% endif %}
+          {% if e.check == "confirmed" %}· clear, matches ✓{% elif e.check == "contradicted" %}· clear, but the opposite ✗{% else %}· not clear enough to rely on{% endif %}</div>{% endif %}
+      </li>{% endfor %}
+    </ul>
+    {% else %}<p class="note">No specific macro rule for {{ ticker }}. Market-wide effects still apply (see <a href="/factors/">Macro</a>).</p>{% endif %}
+    {% if f.measured %}<p class="note">Moves {{ f.measured.market|num }}× the market on average ({{ f.measured.months }} months).</p>{% endif %}
+  </div>
+  <div>
+    <h3 class="mini-head">Company events · 60 days</h3>
+    {% if f.events %}
+    <ul class="event-list">{% for e in f.events %}
+      <li><span class="dot {% if e.label == 'positive' %}up{% elif e.label == 'negative' %}down{% else %}flat{% endif %}"></span>
+        <span class="muted small">{{ e.published_at|date:"j M" }} · {{ e.tag_labels|join:", " }}</span><br>
+        {% if e.url %}<a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}{% if e.similar %} <span class="muted small">+{{ e.similar }} similar</span>{% endif %}</li>
+    {% endfor %}</ul>
+    {% else %}<p class="note">No results, dividends, deals, leadership or regulatory news in the last 60 days.</p>{% endif %}
+    {% if f.drivers %}<h3 class="mini-head" style="margin-top:14px">Also watch</h3>
+    <ul class="note-list">{% for d in f.drivers %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+</div>
