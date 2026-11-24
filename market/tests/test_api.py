@@ -242,6 +242,12 @@ class CalculatorTests(PipelineApiTests):
         self.assertContains(page, 'id="disclaimer"')  # still available from the footer link
         self.assertNotContains(page, "data-auto-open")
 
+    def test_every_page_has_the_loader_and_credits(self):
+        for url in ("/", "/screener/", "/method/"):
+            page = self.client.get(url)
+            self.assertContains(page, 'id="bz-loader"')
+            self.assertContains(page, "Created by <strong>KoshTech Kenya</strong>", html=False)
+
 
 class ExperimentTests(PipelineApiTests):
     def test_pca_eigen_markov_endpoints(self):

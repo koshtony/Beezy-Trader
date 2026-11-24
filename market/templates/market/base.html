@@ -18,6 +18,23 @@
   {% block head %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <!-- Page loader: first in the body so it paints before the page; app.js fades it out once everything has loaded -->
+  <div id="bz-loader" class="bz-loader" role="status" aria-live="polite">
+    <div class="bz-loader-inner">
+      <div class="bz-cell">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <polygon class="bz-cell-track" points="50,3 91,26.5 91,73.5 50,97 9,73.5 9,26.5"/>
+          <polygon class="bz-cell-run" points="50,3 91,26.5 91,73.5 50,97 9,73.5 9,26.5" pathLength="100"/>
+        </svg>
+        <img src="{% static 'market/img/bee.png' %}" alt="" width="64" height="64">
+      </div>
+      <div class="bz-candles" aria-hidden="true">
+        <i class="up"></i><i class="down"></i><i class="up"></i><i class="up"></i><i class="down"></i><i class="up"></i><i class="up"></i>
+      </div>
+      <div class="bz-loader-name"><b>BEEZY MARKETS</b><small>Loading NSE data<span class="bz-dots"><span>.</span><span>.</span><span>.</span></span></small></div>
+    </div>
+  </div>
+  <noscript><style>.bz-loader { display: none; }</style></noscript>
   <div id="page-progress" role="progressbar" aria-label="Loading"></div>
 
   <header class="topbar">
@@ -53,6 +70,7 @@
     <p><strong>Not investment advice.</strong> Data: AFX · Mansa Markets · African Financials · Rokam · stockanalysis.com · CBK · EIA · Google News ·
       <a class="linkish" href="{% url 'data' %}?tab=glossary">Glossary</a> ·
       <button type="button" class="linkish" data-open-disclaimer>Disclaimer</button></p>
+    <p class="credits">© {% now "Y" %} Beezy Markets · Created by <strong>KoshTech Kenya</strong></p>
   </footer>
 
   <!-- Bottom app menu: coloured opposite to the theme so it always stands out -->

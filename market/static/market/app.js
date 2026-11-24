@@ -284,6 +284,40 @@
     }
   }, true);
 
+  // ------------------------------------------------------------ page loader
+  // Shown while a page loads; fades out once scripts, images and charts are in. Clicking through to
+  // another page brings it back (after a short pause, so quick pages don't flash it).
+  const loader = () => document.getElementById("bz-loader");
+  let leaveTimer = null, stuckTimer = null;
+  function hideLoader() {
+    clearTimeout(leaveTimer); clearTimeout(stuckTimer);
+    const l = loader(); if (l) l.classList.add("is-done");
+  }
+  function showLoaderSoon(e) {
+    clearTimeout(leaveTimer); clearTimeout(firstTimer);
+    leaveTimer = setTimeout(() => {
+      if (e && e.type === "click" && e.defaultPrevented) return; // something else handled the click
+      const l = loader(); if (!l) return;
+      l.classList.remove("is-done");
+      stuckTimer = setTimeout(hideLoader, 15000); // navigation stopped, or turned into a download
+    }, 150);
+  }
+  if (document.readyState === "complete") hideLoader(); else window.addEventListener("load", hideLoader);
+  const firstTimer = setTimeout(hideLoader, 8000); // never hold the page back for a slow image or chart
+  window.addEventListener("pageshow", (e) => { if (e.persisted) hideLoader(); }); // back/forward cache
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[href]");
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if ((a.target && a.target !== "_self") || a.hasAttribute("download")) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || url.pathname.startsWith("/api/")) return; // other sites, files, API
+    if (url.hash && url.pathname === location.pathname && url.search === location.search) return; // same page
+    showLoaderSoon(e);
+  });
+  document.addEventListener("submit", (e) => {
+    if (e.target.matches(".jump") && e.target.t.value.trim()) showLoaderSoon();
+  });
+
   // ------------------------------------------------------------ HTMX: progress bar + post-swap hooks
   const bar = () => document.getElementById("page-progress");
   let inflight = 0, timer = null;
