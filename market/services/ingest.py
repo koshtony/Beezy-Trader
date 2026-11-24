@@ -1,8 +1,11 @@
 """Persist scraped data into the database."""
 
+import csv
 import datetime as dt
+import gzip
 import logging
 from contextlib import contextmanager
+from pathlib import Path
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -16,6 +19,10 @@ from . import afx, catalog, news, stockanalysis
 log = logging.getLogger("market.ingest")
 
 INDEX_TICKER = "NASI"
+# Price history exported from a working database (manage.py export_history), so a new server
+# starts with years of closes instead of downloading them again.
+BUNDLE_DIR = Path(__file__).resolve().parent.parent / "data"
+LAST_PRICE_SOURCE: str | None = None
 
 
 @contextmanager
@@ -87,8 +94,9 @@ def index_stock() -> Stock:
 
 
 # ---------------------------------------------------------------- prices
-def store_snapshot(snap: afx.MarketSnapshot) -> int:
-    """Upsert the daily price list. Returns the number of bars written."""
+def store_snapshot(snap: afx.MarketSnapshot, source: str = "afx") -> int:
+    """Upsert the daily price list (from any source in services/prices.py). Returns bars written."""
+    label = f"{source}-daily"
     as_of = snap.as_of or timezone.localdate()
     while as_of.weekday() >= 5:  # the NSE never trades at weekends
         as_of -= dt.timedelta(days=1)
@@ -106,7 +114,7 @@ def store_snapshot(snap: afx.MarketSnapshot) -> int:
                     "close": row.price,
                     "volume": row.volume or 0,
                     "change": row.change or 0.0,
-                    "source": "afx-daily",
+                    "source": label,
                 },
             )
             written += 1
@@ -120,7 +128,7 @@ def store_snapshot(snap: afx.MarketSnapshot) -> int:
                 PriceBar.objects.update_or_create(
                     stock=idx,
                     date=as_of,
-                    defaults={"close": snap.nasi, "change": snap.nasi_change, "source": "afx-daily"},
+                    defaults={"close": snap.nasi, "change": snap.nasi_change, "source": label},
                 )
     return written
 
@@ -128,7 +136,7 @@ def store_snapshot(snap: afx.MarketSnapshot) -> int:
 def _session_date(snap: afx.MarketSnapshot, as_of: dt.date) -> dt.date:
     """If the list is just the previous session repeated, keep it on that session's date."""
     prev_date = (
-        PriceBar.objects.filter(source="afx-daily", date__lt=as_of)
+        PriceBar.objects.filter(source__endswith="-daily", date__lt=as_of)
         .exclude(stock__ticker=INDEX_TICKER)
         .order_by("-date")
         .values_list("date", flat=True)
@@ -138,7 +146,7 @@ def _session_date(snap: afx.MarketSnapshot, as_of: dt.date) -> dt.date:
         return as_of
     prev = {
         t: (c, ch)
-        for t, c, ch in PriceBar.objects.filter(date=prev_date, source="afx-daily").values_list("stock__ticker", "close", "change")
+        for t, c, ch in PriceBar.objects.filter(date=prev_date, source__endswith="-daily").values_list("stock__ticker", "close", "change")
     }
     movers = [r for r in snap.rows if r.price is not None and (prev.get(r.ticker, (None, 0))[1] or 0) != 0]
     if len(movers) < 5:
@@ -148,11 +156,96 @@ def _session_date(snap: afx.MarketSnapshot, as_of: dt.date) -> dt.date:
 
 
 def update_daily_prices() -> int:
+    """Today's price list from the first source that works (AFX, Mansa Markets, African Financials, Rokam)."""
+    from . import prices
+
     with job("prices") as row:
-        snap = afx.fetch_listing()
-        n = store_snapshot(snap)
-        row.message = f"{n} closes for {snap.as_of} (NASI {snap.nasi})"
+        global LAST_PRICE_SOURCE
+        snap, source, problems = prices.fetch_snapshot()
+        n = store_snapshot(snap, source)
+        LAST_PRICE_SOURCE = source
+        nasi = f"NASI {snap.nasi}" if snap.nasi else _index_from_rokam(source)
+        row.message = (f"{n} closes for {snap.as_of} via {prices.NAMES[source]}"
+                       + (f" ({nasi})" if nasi else "")
+                       + (f" · skipped {'; '.join(problems)}" if problems else ""))
         return n
+
+
+def _index_from_rokam(source: str) -> str:
+    """Mansa Markets and African Financials don't publish NASI; take it from Rokam (at most a day behind)."""
+    from . import prices
+
+    if source == "rokam" or prices.is_down("rokam"):
+        return ""
+    try:
+        snap = prices.fetch_source("rokam")
+        if snap.nasi is None or snap.as_of is None:
+            return ""
+        store_snapshot(afx.MarketSnapshot(as_of=snap.as_of, nasi=snap.nasi, nasi_change=snap.nasi_change,
+                                          market_cap=None, rows=[]), "rokam")
+        return f"NASI {snap.nasi} on {snap.as_of} via Rokam"
+    except Exception as exc:
+        log.warning("NASI from Rokam failed: %s", exc)
+        return ""
+
+
+def export_history(folder: Path | None = None) -> tuple[int, int]:
+    """Write every stock and every daily close to the bundle. Returns (stocks, closes)."""
+    folder = folder or BUNDLE_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    stocks = list(Stock.objects.order_by("ticker"))
+    with open(folder / "stocks.csv", "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["ticker", "name", "sector", "kind", "is_suspended", "has_history"])
+        for s in stocks:
+            w.writerow([s.ticker, s.name, s.sector, s.kind, int(s.is_suspended), int(s.history_backfilled_at is not None)])
+    n = 0
+    with gzip.open(folder / "price_history.csv.gz", "wt", newline="", compresslevel=9) as fh:
+        w = csv.writer(fh)
+        w.writerow(["ticker", "date", "close", "volume", "change", "source"])
+        rows = PriceBar.objects.order_by("stock__ticker", "date").values_list("stock__ticker", "date", "close", "volume", "change", "source")
+        for t, d, c, v, ch, src in rows.iterator(chunk_size=10000):
+            w.writerow([t, d.isoformat(), f"{c:g}", v or "", "" if ch is None else f"{ch:g}", src])
+            n += 1
+    return len(stocks), n
+
+
+def import_bundled_history(folder: Path | None = None) -> int:
+    """Load the bundled history into an empty database. Returns closes added (0 if there is no bundle)."""
+    folder = folder or BUNDLE_DIR
+    stocks_csv, bars_gz = folder / "stocks.csv", folder / "price_history.csv.gz"
+    if not (stocks_csv.exists() and bars_gz.exists()):
+        return 0
+    with job("history") as row:
+        with open(stocks_csv, newline="") as fh:
+            meta = list(csv.DictReader(fh))
+        for m in meta:
+            Stock.objects.get_or_create(
+                ticker=m["ticker"],
+                defaults={"name": m["name"], "sector": m["sector"], "kind": m["kind"], "is_suspended": m["is_suspended"] == "1"},
+            )
+        ids = dict(Stock.objects.values_list("ticker", "id"))
+        added, last, batch = 0, None, []
+        with gzip.open(bars_gz, "rt", newline="") as fh:
+            for r in csv.DictReader(fh):
+                sid = ids.get(r["ticker"])
+                if sid is None:
+                    continue
+                d = dt.date.fromisoformat(r["date"])
+                last = max(last, d) if last else d
+                batch.append(PriceBar(stock_id=sid, date=d, close=float(r["close"]),
+                                      volume=int(r["volume"]) if r["volume"] else 0,
+                                      change=float(r["change"]) if r["change"] else None, source=r["source"]))
+                if len(batch) >= 5000:
+                    PriceBar.objects.bulk_create(batch, ignore_conflicts=True)
+                    added += len(batch)
+                    batch = []
+        PriceBar.objects.bulk_create(batch, ignore_conflicts=True)
+        added += len(batch)
+        Stock.objects.filter(ticker__in=[m["ticker"] for m in meta if m["has_history"] == "1"],
+                             history_backfilled_at__isnull=True).update(history_backfilled_at=timezone.now())
+        row.message = f"{added} closes for {len(meta)} counters imported from the bundled history (to {last})"
+    return added
 
 
 def store_history(stock: Stock, points: list[tuple[dt.date, float]]) -> int:

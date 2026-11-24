@@ -1,0 +1,74 @@
+ticker,name,sector,kind,is_suspended,has_history
+ABSA,Absa Bank Kenya Plc,Banking,equity,0,1
+ALP,ALP Real Estate Investment Trust,Real Estate Investment Trust,equity,0,1
+AMAC,Africa Mega Agricorp,Agricultural,equity,0,1
+ARM,ARM Cement Ltd,Construction & Allied,equity,1,0
+BAMB,Bamburi Cement Ltd,Construction & Allied,equity,1,0
+BAT,British American Tobacco Kenya,Manufacturing & Allied,equity,0,1
+BKG,BK Group Plc,Banking,equity,0,1
+BOC,BOC Kenya Ltd,Manufacturing & Allied,equity,0,1
+BRIT,Britam Holdings Ltd,Insurance,equity,0,1
+CABL,East African Cables,Construction & Allied,equity,1,0
+CARB,Carbacid Investments,Manufacturing & Allied,equity,0,1
+CGEN,Car and General Kenya Ltd,Automobiles & Accessories,equity,0,1
+CIC,CIC Insurance Group Ltd,Insurance,equity,0,1
+COOP,Co-operative Bank of Kenya,Banking,equity,0,1
+CRWN,Crown Paints Kenya Ltd,Construction & Allied,equity,0,1
+CTUM,Centum Investment Company,Investment,equity,0,1
+DCON,Deacons East Africa,Commercial & Services,equity,1,0
+DTK,Diamond Trust Bank Kenya Ltd,Banking,equity,0,1
+EABL,East African Breweries Ltd,Manufacturing & Allied,equity,0,1
+EGAD,Eaagads Ltd,Agricultural,equity,0,1
+EQTY,Equity Group Holdings Ltd,Banking,equity,0,1
+EVRD,Eveready East Africa Ltd,Commercial & Services,equity,0,1
+FMLY,Family Bank Ltd,Banking,equity,0,1
+FTGH,Flame Tree Group Holdings,Manufacturing & Allied,equity,0,1
+GLD,Absa NewGold ETF,Exchange Traded Fund,equity,0,1
+HAFR,Home Afrika Ltd,Investment,equity,0,1
+HBE,Homeboyz Entertainment,Commercial & Services,equity,0,1
+HFCB,HFCB Group,Banking,equity,0,1
+IMH,I&M Holdings Plc,Banking,equity,0,1
+JUB,Jubilee Holdings Ltd,Insurance,equity,0,1
+KAPC,Kapchorua Tea Company Ltd,Agricultural,equity,0,1
+KCB,KCB Group,Banking,equity,0,1
+KEGN,KenGen Plc,Energy & Petroleum,equity,0,1
+KNRE,Kenya Re-Insurance Corporation,Insurance,equity,0,1
+KPC,Kenya Pipeline Company,Energy & Petroleum,equity,0,1
+KPLC,Kenya Power & Lighting Company,Energy & Petroleum,equity,0,1
+KPLC-P4,Kenya Power 4% Preference Shares,Energy & Petroleum,equity,0,1
+KPLC-P7,Kenya Power 7% Preference Shares,Energy & Petroleum,equity,0,1
+KQ,Kenya Airways Ltd,Commercial & Services,equity,0,1
+KUKZ,Kakuzi Ltd,Agricultural,equity,0,1
+KURV,Kurwitu Ventures Ltd,Investment,equity,0,1
+LAPR,Laptrust Imara Income-REIT,Real Estate Investment Trust,equity,0,1
+LBTY,Liberty Kenya Holdings Ltd,Insurance,equity,0,1
+LIMT,Limuru Tea Company Ltd,Agricultural,equity,0,1
+LKL,Longhorn Publishers Ltd,Commercial & Services,equity,0,1
+MSC,Mumias Sugar Company Ltd,Manufacturing & Allied,equity,1,0
+NASI,NSE All Share Index,Index,index,0,1
+NBV,Nairobi Business Ventures Ltd,Commercial & Services,equity,0,1
+NCBA,NCBA Group Plc,Banking,equity,0,1
+NMG,Nation Media Group,Commercial & Services,equity,0,1
+NSE,Nairobi Securities Exchange Ltd,Investment Services,equity,0,1
+OCH,Olympia Capital Holdings Ltd,Investment,equity,0,1
+PORT,East African Portland Cement,Construction & Allied,equity,0,1
+QMRT,Quick Mart Plc,Commercial & Services,equity,0,1
+SASN,Sasini Tea and Coffee Ltd,Agricultural,equity,0,1
+SBIC,Stanbic Holdings Ltd,Banking,equity,0,1
+SCAN,ScanGroup Ltd,Commercial & Services,equity,0,1
+SCBK,Standard Chartered Bank Ltd,Banking,equity,0,1
+SCOM,Safaricom Plc,Telecommunication,equity,0,1
+SGL,Standard Group Ltd,Commercial & Services,equity,0,1
+SKL,Shri Krishana Overseas Ltd,Manufacturing & Allied,equity,0,1
+SLAM,Sanlam Allianz Holdings,Insurance,equity,0,1
+SMER,Sameer Africa Plc,Commercial & Services,equity,0,1
+SMWF,Satrix MSCI World Feeder ETF,Exchange Traded Fund,equity,0,1
+TCL,TransCentury Plc,Investment,equity,1,0
+TOTL,Total Kenya Ltd,Energy & Petroleum,equity,0,1
+TPSE,TPS Eastern Africa Serena Ltd,Commercial & Services,equity,0,1
+TRFC,TRIFIC Green USD I-REIT,Real Estate Investment Trust,equity,0,1
+UCHM,Uchumi Supermarket Ltd,Commercial & Services,equity,0,1
+UMME,Umeme Ltd,Energy & Petroleum,equity,0,1
+UNGA,Unga Group Ltd,Manufacturing & Allied,equity,0,1
+WTK,Williamson Tea Kenya Ltd,Agricultural,equity,0,1
+XPRS,Express Kenya Ltd,Commercial & Services,equity,0,1

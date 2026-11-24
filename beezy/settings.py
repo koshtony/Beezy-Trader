@@ -171,6 +171,8 @@ BEEZY = {
     "MACRO_DELAY": float(os.environ.get("BEEZY_MACRO_DELAY", "3")),
     "NEWS_LOOKBACK_DAYS": 60,
     "USER_AGENT": "BeezyMarkets/1.0 (personal NSE research tool; low-frequency)",
+    # Daily price list sources, tried in this order (see market/services/prices.py).
+    "PRICE_SOURCES": os.environ.get("BEEZY_PRICE_SOURCES", "afx,mansa,africanfinancials,rokam"),
     "HTTP_TIMEOUT": 30,
     # Liquidity floor for recommendations: average daily turnover (KES) over 30 sessions.
     "MIN_AVG_TURNOVER": 500_000,

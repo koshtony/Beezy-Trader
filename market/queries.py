@@ -3,6 +3,7 @@
 import datetime as dt
 import functools
 import hashlib
+import re
 
 from django.core.cache import cache
 from django.db.models import Max
@@ -58,6 +59,7 @@ def market_summary() -> dict:
         "as_of": run.as_of.isoformat() if run and run.as_of else None,
         "analysed_at": run.created_at.isoformat() if run else None,
         "prices_updated_at": last_prices.finished_at.isoformat() if last_prices and last_prices.finished_at else None,
+        "price_source": (re.search(r" via ([A-Za-z ]+?)(?: \(|$| ·)", last_prices.message or "") or [None, None])[1] if last_prices else None,
         "index": payload.get("index", {}),
         "breadth": payload.get("breadth", {}),
         "stocks": Stock.objects.filter(kind=Stock.KIND_EQUITY).count(),

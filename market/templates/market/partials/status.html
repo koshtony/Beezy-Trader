@@ -9,7 +9,7 @@
     {% else %}
       {% if status.problem %}<span class="status-problem" title="{{ status.problem.text }}">⚠ Prices not updated: {{ status.problem.text }}{% if status.problem.retry_at %} · next try {{ status.problem.retry_at|date:"H:i" }}{% endif %}</span>
       <span class="sep">|</span>{% endif %}
-      <span>Prices as at <strong>{{ summary.as_of|default:"—" }}</strong></span>
+      <span>Prices as at <strong>{{ summary.as_of|default:"—" }}</strong>{% if summary.price_source %} <span class="muted">({{ summary.price_source }})</span>{% endif %}</span>
       <span class="sep">|</span>
       <span>Analysed {% if summary.analysed_at %}{{ summary.analysed_at|iso|timesince }} ago{% else %}never{% endif %}</span>
       <span class="sep">|</span>

@@ -2,7 +2,10 @@
 
 **Beezy Markets** is a Django + Django Ninja stock analysis app for the **Nairobi Securities Exchange**. It does the following:
 
-* scrapes **daily closing prices** and keeps about **10 years of history** per stock in the database
+* scrapes **daily closing prices** and keeps about **10 years of history** per stock in the database.
+  Prices come from the first of four independent sources that works: afx.kwayisi.org, Mansa Markets,
+  African Financials or Rokam. Each price list is checked before it is stored: enough counters, a
+  recent date, and prices in line with recent closes.
 * scrapes **fundamentals** and computes the key investor metrics with the live price:
   P/E, PEG, P/B, P/S, EPS (and its trend), ROE, free cash flow, gross margin, debt-to-equity,
   dividend yield and payout/cover. Each metric gets a good/fair/poor verdict against the stock's sector.
@@ -75,7 +78,8 @@ see the app sooner, run `python manage.py bootstrap --no-history`, then
 
 | Command | What it does |
 |---|---|
-| `scrape_prices` | Today's NSE price list (one request) |
+| `scrape_prices` | Today's NSE price list (one request, from the first source that works) |
+| `export_history` | Write all stocks and daily closes to `market/data/` (0.5 MB). Commit it: a new server imports it instead of downloading history |
 | `backfill_history [TICKERS…] [--missing]` | ~10 years of daily closes per stock, plus the NASI index |
 | `scrape_fundamentals [TICKERS…]` | Statistics and EPS history from stockanalysis.com |
 | `scrape_news [TICKERS…] [--quick] [--rescore]` | Google News headlines with sentiment labels (`--quick`: combined queries over recent days; `--rescore` relabels stored headlines) |
@@ -94,7 +98,9 @@ NSE trading hours are 09:30–15:00, so the three runs fetch the previous close,
 
 What a routine run costs:
 
-* **Prices**: one request.
+* **Prices**: one request to the first source that works, in the order set by `BEEZY_PRICE_SOURCES`
+  (default `afx,mansa,africanfinancials,rokam`). A source that fails is tried last for the next six
+  hours. If the source has no index value, NASI comes from Rokam, at most a day behind.
 * **Macro data**: about nine requests, once a day (Central Bank of Kenya and EIA). If a source fails,
   the others still update and the price refresh carries on.
 * **News**: about 20 requests and 30 s. Busy names get their own query; quiet ones share combined
@@ -201,9 +207,12 @@ service can't work, because a Railway volume attaches to only one service.
    `.env.example`. The generated `*.up.railway.app` domain is trusted automatically. For a custom
    domain, add it to `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS`.
 4. **Generate a domain** (Settings → Networking) and deploy.
-5. **Load the data**, choosing one of:
-   * *Automatic*: an empty database bootstraps itself on first start (about 75 minutes because of
-     AFX's crawl delay; resumes after a restart). The site shows data as it arrives.
+5. **Load the data**. This is automatic: on first start an empty database imports the bundled
+   history in `market/data/` (all closes since 2016, in seconds), then fetches today's prices,
+   fundamentals, news and macro data. To refresh the bundle, run `python manage.py export_history`
+   locally and commit the result. Alternatives:
+   * *No bundle*: the database downloads about 10 years of history from AFX (about 75 minutes
+     because of its crawl delay; resumes after a restart). This needs AFX to be reachable.
    * *Seed from your machine*: `python manage.py snapshot_db seed.sqlite3`, then
      `railway volume files upload seed.sqlite3 /seed.sqlite3` and restart the service. The seed is
      installed only while production has no price data yet.

@@ -7,7 +7,9 @@
 
 <h2 class="section-head">1 · Data</h2>
 <ul>
-  <li><b>Daily prices</b>: the NSE end-of-day price list (one request to afx.kwayisi.org), stored each trading day with volume.</li>
+  <li><b>Daily prices</b>: the NSE end-of-day price list, stored each trading day with volume. It comes from the first of four
+    independent sources that works: afx.kwayisi.org, Mansa Markets, African Financials or Rokam. Each list is checked before it is stored
+    (enough counters, a recent date, prices in line with recent closes); a source that fails is tried last for six hours.</li>
   <li><b>History</b>: about ten years of daily closes per counter, loaded once. The site's 60-second crawl delay is respected.</li>
   <li><b>Fundamentals</b>: trailing-twelve-month revenue, gross profit, net income, EPS (and its multi-year history), equity, debt, operating cash flow, capex, dividends and analyst targets from stockanalysis.com. Refreshed weekly.</li>
   <li><b>News</b>: Google News (Kenya edition), searched for each company's name over the last 60 days.</li>

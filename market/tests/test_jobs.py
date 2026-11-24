@@ -357,6 +357,14 @@ UNREACHABLE = ("HTTPSConnectionPool(host='afx.kwayisi.org', port=443): Max retri
 class UnreachablePriceSourceTests(TestCase):
     """What Railway hit: the price list host can't be reached from the server."""
 
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        patcher = mock.patch.object(ingest, "BUNDLE_DIR", Path(tempfile.mkdtemp()))  # no bundled history here
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_bootstrap(self):
         with mock.patch.object(ingest, "update_daily_prices", side_effect=requests.ConnectionError(UNREACHABLE)), \
              mock.patch.object(ingest, "update_fundamentals") as funds, \

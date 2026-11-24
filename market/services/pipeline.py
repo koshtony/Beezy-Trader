@@ -39,7 +39,7 @@ def _reported_changes() -> dict[int, tuple[dt.date, float]]:
     """Latest exchange-reported daily change per stock (from the daily price list)."""
     out: dict[int, tuple[dt.date, float]] = {}
     for sid, d, ch in (
-        PriceBar.objects.filter(source="afx-daily", change__isnull=False)
+        PriceBar.objects.filter(source__endswith="-daily", change__isnull=False)
         .order_by("stock_id", "date")
         .values_list("stock_id", "date", "change")
     ):
@@ -325,7 +325,9 @@ def _daily_refresh(news: bool, force_fundamentals: bool, full_news: bool | None)
     missing = Stock.objects.filter(
         kind=Stock.KIND_EQUITY, is_suspended=False, history_backfilled_at__isnull=True
     ).count()
-    if missing and missing <= 5:  # new listings: backfill a few (60s each)
+    from . import prices
+
+    if missing and missing <= 5 and not prices.is_down("afx"):  # new listings: backfill a few (60s each)
         ingest.backfill_history(only_missing=True)
         parts.append(f"backfilled {missing} new listings")
         changed = True
@@ -397,7 +399,11 @@ def needs_bootstrap() -> bool:
 def bootstrap(history: bool = True) -> str:
     """First-time load. History respects AFX's 60s crawl delay (≈75 min, resumable); fundamentals,
     news and macro data run alongside it, and still load if the price source can't be reached."""
+    from . import prices
+
     with ingest.job("bootstrap") as jl:
+        if not PriceBar.objects.filter(source="afx-hist").exists():
+            ingest.import_bundled_history()  # years of closes in seconds, no downloads
         price_error = None
         try:
             ingest.update_daily_prices()
@@ -430,7 +436,7 @@ def bootstrap(history: bool = True) -> str:
 
         t = threading.Thread(target=side, daemon=True, name="beezy-bootstrap-side")
         t.start()
-        if history and price_error is None:  # same host as the price list
+        if history and price_error is None and not prices.is_down("afx"):  # history only comes from AFX
             ingest.backfill_history(only_missing=True)
         t.join()
         if PriceBar.objects.exists():
@@ -446,6 +452,8 @@ def short_error(message: str) -> str:
     import re
 
     message = message or ""
+    if "all price sources failed" in message:
+        return message[message.index("all price sources failed"):][:300]
     if "can't reach" in message:  # already summarised (e.g. a failed bootstrap's message)
         return message[message.index("can't reach"):].split(";")[0].strip()
     host = re.search(r"host='([^']+)'", message)
