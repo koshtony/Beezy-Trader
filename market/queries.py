@@ -397,8 +397,15 @@ def stock_factors(ticker: str) -> dict | None:
 def job_status() -> dict:
     running = pipeline.running_job()
     recent = list(JobLog.objects.all()[:8])
+    problem = None
+    latest = JobLog.objects.filter(job__in=["prices", "bootstrap"]).first()
+    if latest is not None and latest.status == JobLog.FAILED:
+        problem = {"text": pipeline.short_error(latest.message), "at": latest.finished_at or latest.started_at}
+        if latest.job == "bootstrap":
+            problem["retry_at"] = latest.started_at + pipeline.BOOTSTRAP_RETRY
     return {
         "running": bool(running),
+        "problem": problem,
         "current": {"job": running.job, "progress": running.progress, "started_at": running.started_at.isoformat()} if running else None,
         "recent": [
             {

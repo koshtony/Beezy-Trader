@@ -11,6 +11,20 @@
 {% endblock %}
 
 {% block content %}
+{% if not summary.as_of %}
+<section class="card empty-state">
+  <h2 class="section-head">No market data yet</h2>
+  {% if status.running %}
+  <p>The first load is running: today's prices, about 10 years of history, fundamentals, news and macro data. History
+    takes about 75 minutes because the price source allows one request a minute. Pages fill in as soon as it finishes.</p>
+  {% elif status.problem %}
+  <p class="down">The price source can't be reached from this server: {{ status.problem.text }}.{% if status.problem.retry_at %} Next try at {{ status.problem.retry_at|date:"H:i" }}.{% endif %}</p>
+  <p class="note">Fundamentals, news and macro data still load. See the Macro and News pages meanwhile.</p>
+  {% else %}
+  <p>Waiting for the first scheduled refresh.</p>
+  {% endif %}
+</section>
+{% endif %}
 <section class="headline-row">
   <div class="index-box">
     <div class="kicker">NSE All Share Index</div>

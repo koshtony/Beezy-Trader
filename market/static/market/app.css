@@ -445,3 +445,6 @@ ul.why.mixed li::before { content: "~"; color: var(--muted); }
   .app-nav-item { padding: 10px 14px; }
 }
 .dot.down { background: var(--down); }
+
+/* fetch problems shown in the status bar */
+.status-problem { color: var(--down); font-weight: 700; }

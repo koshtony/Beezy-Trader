@@ -16,6 +16,7 @@ def dashboard(request):
         "summary": queries.market_summary(),
         "recs": queries.recommendations(),
         "tape": [r for r in queries.stock_rows(sort="market_cap") if not r["suspended"]][:40],
+        "status": queries.job_status(),
         "nav": "dashboard",
     }
     return render(request, "market/dashboard.html", ctx)

@@ -42,6 +42,19 @@ def _progress(row: JobLog | None, text: str):
     log.info(text)
 
 
+def ensure_catalog_stocks() -> int:
+    """Create the known NSE counters from the built-in catalogue, so fundamentals, news and macro can
+    load even while the price list can't be fetched. Returns how many were added."""
+    have = set(Stock.objects.values_list("ticker", flat=True))
+    new = [
+        Stock(ticker=t, name=catalog.NEWS_ALIASES.get(t, (t,))[0], sector=catalog.sector_for(t), kind=Stock.KIND_EQUITY)
+        for t in catalog.TICKER_SECTOR
+        if t not in have
+    ]
+    Stock.objects.bulk_create(new, ignore_conflicts=True)
+    return len(new)
+
+
 def ensure_stock(ticker: str, name: str, *, suspended: bool | None = None) -> Stock:
     kind = Stock.KIND_EQUITY
     stock, created = Stock.objects.get_or_create(

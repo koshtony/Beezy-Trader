@@ -348,3 +348,51 @@ class PrepareDataTests(SimpleTestCase):
         self.assertEqual(self.note(self.db), "local")
         backup = next(self.dir.glob("db.sqlite3.before-seed-*"))
         self.assertEqual(self.note(backup), "production")
+
+
+UNREACHABLE = ("HTTPSConnectionPool(host='afx.kwayisi.org', port=443): Max retries exceeded with url: /nse/ "
+               "(Caused by NewConnectionError(\"Failed to establish a new connection: [Errno 101] Network is unreachable\"))")
+
+
+class UnreachablePriceSourceTests(TestCase):
+    """What Railway hit: the price list host can't be reached from the server."""
+
+    def run_bootstrap(self):
+        with mock.patch.object(ingest, "update_daily_prices", side_effect=requests.ConnectionError(UNREACHABLE)), \
+             mock.patch.object(ingest, "update_fundamentals") as funds, \
+             mock.patch.object(ingest, "update_news") as news_, \
+             mock.patch("market.services.macro.update") as macro_update, \
+             mock.patch.object(ingest, "backfill_history") as history:
+            with self.assertRaises(RuntimeError):
+                pipeline.bootstrap()
+        return funds, news_, macro_update, history
+
+    def test_other_sources_still_load_and_the_error_is_recorded(self):
+        funds, news_, macro_update, history = self.run_bootstrap()
+        funds.assert_called_once()
+        news_.assert_called_once_with(full=True)
+        macro_update.assert_called_once()
+        history.assert_not_called()  # same host as the price list
+        self.assertTrue(Stock.objects.filter(ticker="SCOM").exists())  # stock list from the catalogue
+        row = JobLog.objects.get(job="bootstrap")
+        self.assertEqual(row.status, JobLog.FAILED)
+        self.assertIn("can't reach afx.kwayisi.org (network unreachable)", row.message)
+
+    def test_no_retry_storm(self):
+        self.run_bootstrap()
+        self.assertFalse(pipeline.needs_bootstrap())  # waits 30 minutes
+        JobLog.objects.filter(job="bootstrap").update(started_at=timezone.now() - dt.timedelta(minutes=31))
+        self.assertTrue(pipeline.needs_bootstrap())
+
+    def test_pages_explain_the_problem(self):
+        self.run_bootstrap()
+        status = queries.job_status()
+        self.assertFalse(status["running"])
+        self.assertIn("afx.kwayisi.org", status["problem"]["text"])
+        self.assertContains(self.client.get("/api/ui/status"), "Prices not updated: can&#x27;t reach afx.kwayisi.org")
+        self.assertContains(self.client.get("/"), "The price source can't be reached from this server")
+
+    def test_short_error(self):
+        self.assertEqual(pipeline.short_error(UNREACHABLE), "can't reach afx.kwayisi.org (network unreachable)")
+        self.assertEqual(pipeline.short_error("HTTPSConnectionPool(host='x.org', port=443): Read timed out."), "can't reach x.org (timed out)")
+        self.assertEqual(pipeline.short_error("something else"), "something else")

@@ -24,6 +24,7 @@ _last_hit: dict[str, float] = {}
 # Extra seconds between requests after a host answers 429; eases off again on success.
 _penalty: dict[str, float] = {}
 MAX_PENALTY = 20.0
+CONNECT_TIMEOUT = 10  # an unreachable host fails in seconds, not half a minute per try
 _lock = threading.Lock()
 _session: requests.Session | None = None
 
@@ -84,7 +85,7 @@ def fetch(url: str, *, headers: dict | None = None, retries: int = 2, browser_ua
     for attempt in range(retries + 1):
         _wait_turn(host)
         try:
-            r = session().get(url, headers=hdrs, timeout=_cfg("HTTP_TIMEOUT"))
+            r = session().get(url, headers=hdrs, timeout=(CONNECT_TIMEOUT, _cfg("HTTP_TIMEOUT")))
             if r.status_code == 429:
                 raise RateLimited(f"429 for {url}", _retry_after(r.headers.get("Retry-After")))
             if r.status_code >= 500:

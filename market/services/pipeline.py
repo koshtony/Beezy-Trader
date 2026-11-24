@@ -378,37 +378,84 @@ def prune(now=None) -> str:
         return jl.message
 
 
+BOOTSTRAP_RETRY = dt.timedelta(minutes=30)
+
+
 def needs_bootstrap() -> bool:
-    """An empty or mostly history-less database that hasn't been seeded in the last day."""
+    """An empty or mostly history-less database that hasn't been seeded in the last day, and no
+    attempt in the last 30 minutes (so an unreachable price source isn't retried non-stop)."""
+    has_prices = PriceBar.objects.exists()
     missing = Stock.objects.filter(kind=Stock.KIND_EQUITY, is_suspended=False, history_backfilled_at__isnull=True).count()
-    empty = not Stock.objects.exists()
-    if not (empty or missing > 5):
+    if has_prices and missing <= 5:
         return False
-    return not JobLog.objects.filter(job="history", started_at__gte=timezone.now() - dt.timedelta(hours=20)).exists()
+    now = timezone.now()
+    if JobLog.objects.filter(job="bootstrap", started_at__gte=now - BOOTSTRAP_RETRY).exists():
+        return False
+    return not JobLog.objects.filter(job="history", status=JobLog.OK, started_at__gte=now - dt.timedelta(hours=20)).exists()
 
 
 def bootstrap(history: bool = True) -> str:
-    """First-time load. History respects AFX's 60s crawl delay (≈75 min, resumable);
-    fundamentals and news run alongside it."""
-    ingest.update_daily_prices()
-
-    def side():
+    """First-time load. History respects AFX's 60s crawl delay (≈75 min, resumable); fundamentals,
+    news and macro data run alongside it, and still load if the price source can't be reached."""
+    with ingest.job("bootstrap") as jl:
+        price_error = None
         try:
-            ingest.update_fundamentals()
-            ingest.update_news(full=True)
-            macro.update()
-        except Exception:
-            log.exception("bootstrap side jobs failed")
-        finally:
-            connection.close()
+            ingest.update_daily_prices()
+        except Exception as exc:
+            price_error = short_error(str(exc))
+            log.warning("bootstrap: price list unavailable: %s", price_error)
+            ingest.ensure_catalog_stocks()
 
-    t = threading.Thread(target=side, daemon=True, name="beezy-bootstrap-side")
-    t.start()
-    if history:
-        ingest.backfill_history(only_missing=True)
-    t.join()
-    run = run_analysis()
-    return "bootstrap done; top5: " + ", ".join(p["ticker"] for p in run.payload.get("top5", []))
+        # On a retry, skip what already loaded (decided here, before the side thread starts).
+        now = timezone.now()
+        recent = lambda job: JobLog.objects.filter(job=job, status=JobLog.OK, started_at__gte=now - dt.timedelta(hours=20)).exists()
+        steps = [
+            (name, fn) for name, fn, done in (
+                ("fundamentals", ingest.update_fundamentals,
+                 Fundamentals.objects.filter(fetched_at__gte=now - dt.timedelta(days=7)).exists()),
+                ("news", lambda: ingest.update_news(full=True), recent("news-full")),
+                ("macro", macro.update, recent("macro")),
+            ) if not done
+        ]
+
+        def side():
+            try:
+                for name, fn in steps:
+                    try:
+                        fn()
+                    except Exception:
+                        log.exception("bootstrap: %s failed", name)
+            finally:
+                connection.close()
+
+        t = threading.Thread(target=side, daemon=True, name="beezy-bootstrap-side")
+        t.start()
+        if history and price_error is None:  # same host as the price list
+            ingest.backfill_history(only_missing=True)
+        t.join()
+        if PriceBar.objects.exists():
+            run = run_analysis()
+            jl.message = "bootstrap done; top5: " + ", ".join(p["ticker"] for p in run.payload.get("top5", []))
+        if price_error:
+            raise RuntimeError(f"{price_error}; fundamentals, news and macro data loaded; retrying prices in 30 minutes")
+        return jl.message
+
+
+def short_error(message: str) -> str:
+    """Plain-language summary of a fetch failure, e.g. "can't reach afx.kwayisi.org (network unreachable)"."""
+    import re
+
+    message = message or ""
+    if "can't reach" in message:  # already summarised (e.g. a failed bootstrap's message)
+        return message[message.index("can't reach"):].split(";")[0].strip()
+    host = re.search(r"host='([^']+)'", message)
+    low = message.lower()
+    reason = ("network unreachable" if "unreachable" in low else "timed out" if "timed out" in low or "timeout" in low
+              else "connection refused" if "refused" in low else "name lookup failed" if "resolve" in low or "name or service" in low
+              else "blocked" if " 403 " in f" {low} " or "403 for" in low else "")
+    if host:
+        return f"can't reach {host.group(1)}" + (f" ({reason})" if reason else "")
+    return re.sub(r"^[A-Za-z]+(Error|Exception): ", "", message)[:160] or "unknown error"
 
 
 def running_job():
